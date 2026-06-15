@@ -13,43 +13,45 @@
 
 ## Table of Contents
 
-- [1. About the Project](#about-the-project)
-- [2. Features](#features)
-  - [2.1. Film Logging](#film-logging)
-  - [2.2. Original Rating System](#original-rating-system)
-  - [2.3. Mood-Based Recommendation Engine](#mood-based-recommendation-engine)
-  - [2.4. Personal Dashboard](#personal-dashboard)
-- [3. Tech Stack](#tech-stack)
-- [4. Architecture](#architecture)
-- [5. Database](#database)
-- [6. Project Structure](#project-structure)
-- [7. Getting Started](#getting-started)
-  - [7.1. Prerequisites](#prerequisites)
-  - [7.2. One time installation](#one-time-installation)
-    - [7.2.1. Clone the repository](#clone-the-repository)
-    - [7.2.2. Run the setup script](#run-the-setup-script)
-  - [7.3. Each working session](#each-working-session)
-  - [7.4. Cleaning the project](#cleaning-the-project)
-- [8. API Overview](#api-overview)
-- [9. Git Workflow](#git-workflow)
-  - [9.1. Branch Strategy](#branch-strategy)
-  - [9.2. Step-by-step workflow for each issue](#step-by-step-workflow-for-each-issue)
-    - [9.2.1. Start a new issue](#start-a-new-issue)
-    - [9.2.2. Work and commit regularly](#work-and-commit-regularly)
-    - [9.2.3. Before opening a Pull Request](#before-opening-a-pull-request)
-    - [9.2.4. Open a Pull Request on GitHub](#open-a-pull-request-on-github)
-    - [9.2.5. After the merge](#after-the-merge)
-  - [9.3. Commit Convention](#commit-convention)
-  - [9.4. Closing Issues via Commits](#closing-issues-via-commits)
-- [10. Testing](#testing)
-- [11. Documentation](#documentation)
-  - [11.1. Portfolio Project Progress Reports](#portfolio-project-progress-reports)
-  - [11.2. Technical Diagrams](#technical-diagrams)
-  - [11.3. UI Prototype](#ui-prototype)
-- [12. Roadmap](#roadmap)
-  - [12.1. MVP (current scope)](#mvp-current-scope)
-  - [12.2. Future versions](#future-versions)
-- [13. Author](#author)
+- [🎬 Film-like](#-film-like)
+  - [Table of Contents](#table-of-contents)
+  - [About the Project](#about-the-project)
+  - [Features](#features)
+    - [Film Logging](#film-logging)
+    - [Original Rating System](#original-rating-system)
+    - [Mood-Based Recommendation Engine](#mood-based-recommendation-engine)
+    - [Personal Dashboard](#personal-dashboard)
+  - [Tech Stack](#tech-stack)
+  - [Architecture](#architecture)
+  - [Database](#database)
+  - [Project Structure](#project-structure)
+  - [Getting Started](#getting-started)
+    - [Prerequisites](#prerequisites)
+    - [One time installation](#one-time-installation)
+      - [Clone the repository](#clone-the-repository)
+      - [Run the setup script](#run-the-setup-script)
+    - [Each working session](#each-working-session)
+    - [Cleaning the project](#cleaning-the-project)
+  - [API Overview](#api-overview)
+  - [Git Workflow](#git-workflow)
+    - [Branch Strategy](#branch-strategy)
+    - [Step-by-step workflow for each issue](#step-by-step-workflow-for-each-issue)
+      - [Start a new issue](#start-a-new-issue)
+      - [Work and commit regularly](#work-and-commit-regularly)
+      - [Before opening a Pull Request](#before-opening-a-pull-request)
+      - [Open a Pull Request on GitHub](#open-a-pull-request-on-github)
+      - [After the merge](#after-the-merge)
+    - [Commit Convention](#commit-convention)
+    - [Closing Issues via Commits](#closing-issues-via-commits)
+  - [Testing](#testing)
+  - [Documentation](#documentation)
+    - [Portfolio Project Progress Reports](#portfolio-project-progress-reports)
+    - [Technical Diagrams](#technical-diagrams)
+    - [UI Prototype](#ui-prototype)
+  - [Roadmap](#roadmap)
+    - [MVP (current scope)](#mvp-current-scope)
+    - [Future versions](#future-versions)
+  - [Author](#author)
 
 ---
 
@@ -496,10 +498,11 @@ All project documentation is managed as part of the portfolio creation process:
 ## Author
 
 **zahin - dev**
-University: Kanagawa Institute of Technology
-Faculty/Department: Faculty of Information Technology, Department of Information Systems
-Year: 3rd Year Undergraduate Student
-E-mail: islam.zahin.0116@gmail.com
+University: Kanagawa Institute of Technology  
+Faculty: Faculty of Information Technology  
+Deapartment：Department of Information Systems   
+Year: 3rd Year Undergraduate Student  
+E-mail: islam.zahin.0116@gmail.com  
 
 - GitHub: [@zahin-dev](https://github.com/zahin-dev)
 
