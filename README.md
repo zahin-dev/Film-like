@@ -3,12 +3,6 @@
 > A personal film diary and AI-powered recommendation engine.<br>
 > Log what you watch, rate it your way, and get suggestions based on your mood and streaming platforms.
 
-![Status]
-![Python]
-![FastAPI]
-![React]
-![PostgreSQL]
-
 ---
 
 ## Table of Contents
@@ -497,7 +491,7 @@ All project documentation is managed as part of the portfolio creation process:
 
 ## Author
 
-**zahin - dev**
+**zahin - dev**  
 University: Kanagawa Institute of Technology  
 Faculty: Faculty of Information Technology  
 Deapartment：Department of Information Systems   
