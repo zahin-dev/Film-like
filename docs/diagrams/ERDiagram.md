@@ -1,26 +1,10 @@
-# 🎬 Film-like - Entity Relationship Diagram
+# Film-like - Entity Relationship Diagram
 
-This document describes the relational database structure used by Film-like.
+This document shows only the database objects created by the current SQLAlchemy models and Alembic migrations. It does not include planned watchlist, platform, or user-platform-preference tables.
 
-The database is designed for **PostgreSQL** and stores only the application's persistent data: `users`, `watchlist entries`, `viewing history entries`, `tags`, `platforms`, and relationship tables.
+TMDB is used as the source of truth for complete film metadata. The application stores the TMDB identifier and caches the film title and poster URL in viewing-history entries so that history lists can be displayed without an additional TMDB request for every item.
 
-Film metadata is not stored locally because Film-like uses the **TMDB API** as the source of truth.
-Only the `tmdb_id` is stored in the database when a user saves or watches a film.
-
----
-
-## Table of Contents
-
-- [1. ER Diagram](#er-diagram)
-    - [1.1. Glossary](#glossary)
-    - [1.2. Relationship Summary](#relationship-summary)
-- [2. Design Notes](#design-notes)
-    - [2.1. Prestige Tier Values](#prestige-tier-values)
-- [3. Author](#author)
-
----
-
-## ER Diagram
+## Current Database Schema
 
 ```mermaid
 erDiagram
@@ -32,137 +16,93 @@ erDiagram
         varchar email UK
         varchar hashed_password
         boolean is_admin
-        integer age
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    watchlist_entries {
-        uuid id PK
-        uuid user_id FK
-        integer tmdb_id
-        timestamptz created_at
-        timestamptz updated_at
+        integer age "nullable"
+        timestamp created_at
+        timestamp updated_at
     }
 
     viewing_history_entries {
-        uuid        id               PK
-        uuid        user_id          FK
-        integer     tmdb_id
-        prestige_tier prestige_tier     "nullable"
-        text        personal_note    "nullable"
-        timestamptz created_at
-        timestamptz updated_at
+        uuid id PK
+        uuid user_id FK
+        integer tmdb_id
+        text title "nullable cached value"
+        text poster_url "nullable cached value"
+        prestigetier prestige_tier "nullable"
+        text personal_note "nullable"
+        timestamp created_at
+        timestamp updated_at
     }
 
     tags {
         integer id PK
         varchar name UK
-        text description
-    }
-
-    platforms {
-        integer id PK
-        varchar name UK
-        text logo_url
+        varchar description
     }
 
     viewing_history_tags {
-        uuid viewing_history_entry_id FK
-        integer tag_id FK
+        uuid viewing_history_entry_id PK,FK
+        integer tag_id PK,FK
     }
 
-    user_platforms {
-        uuid user_id FK
-        integer platform_id FK
-    }
-
-    users ||--o{ watchlist_entries : owns
     users ||--o{ viewing_history_entries : owns
-
     viewing_history_entries ||--o{ viewing_history_tags : has
     tags ||--o{ viewing_history_tags : labels
-
-    users ||--o{ user_platforms : subscribes
-    platforms ||--o{ user_platforms : selected_by
 ```
 
-### Glossary
+## Tables
 
-| Term | Meaning |
+### `users`
+
+Stores registration and authentication data plus optional age and reserved admin status. Email uniqueness is enforced by the database. Passwords are stored as bcrypt hashes, not plain text.
+
+### `viewing_history_entries`
+
+Each entry belongs to a user and stores:
+
+- `tmdb_id`, which identifies the film in TMDB
+- cached `title` and `poster_url` values captured when the film is logged
+- an optional `prestige_tier`
+- an optional `personal_note`
+- creation and update timestamps
+
+Complete details such as synopsis, genres, credits, runtime, and current watch-provider data remain sourced from TMDB. The cached title and poster URL are deliberately local so a history list does not require one TMDB request per entry.
+
+### `tags`
+
+Stores the application-managed tag catalogue. Tags use integer primary keys and are seeded by `backend/seeds/seed_tag.py`.
+
+### `viewing_history_tags`
+
+Associates viewing-history entries with zero or more tags. Its two foreign-key columns form a composite primary key, preventing the same tag from being linked to the same entry twice.
+
+## Relationship Summary
+
+| Relationship | Type | Storage |
+|---|---|---|
+| User to viewing-history entry | One-to-many | `viewing_history_entries.user_id` references `users.id` |
+| Viewing-history entry to tag | Many-to-many | `viewing_history_tags` joins `viewing_history_entries` and `tags` |
+
+## Prestige Tier Values
+
+The PostgreSQL `prestigetier` enum and Python `PrestigeTier` enum contain these stored values:
+
+| Stored value | Intended meaning in source comments |
 |---|---|
-| `PK` | **Primary Key** - unique identifier of a table row |
-| `FK` | **Foreign Key** - column referencing the primary key of another table |
-| `UK` | **Unique Key** - ensures that a value cannot appear twice in the same column |
-| `uuid` | **Universally Unique Identifier** - used for user-owned entities to avoid predictable IDs |
-| `integer` | **Whole number** - used for simple reference tables such as tags and platforms |
-| `varchar` | **Variable-length text field** - usually used for short strings |
-| `text` | **Longer text field** - used when the content length may vary significantly |
-| `boolean` | **True/false value** |
-| `timestamptz` | **PostgreSQL timestamp with time zone** - useful for storing dates consistently across time zones |
-| `enum` | **Fixed list of allowed values** - here, `prestige_tier` limits ratings to predefined values |
+| `Platinum` | Exceptional; an all-time favourite |
+| `Gold` | Great and memorable |
+| `Silver` | Good and worth watching |
+| `Bronze` | Decent; had its moments |
+| `Coal` | Poor and mostly disappointing |
+| `Trash` | Bad; regretted watching it |
 
----
+## Scope Boundaries
 
-### Relationship Summary
+The current schema has no local `films` table. It also has no `watchlist_entries`, `platforms`, or `user_platforms` table. Those concepts are planned and must not be treated as current database entities.
 
-| Relationship | Entity A | Entity B | Type | Join table |
-|---|---|---|---|---|
-| A user owns watchlist entries | `users` | `watchlist_entries` | One-to-many | - |
-| A user owns viewing history entries | `users` | `viewing_history_entries` | One-to-many | - |
-| A user subscribes to platforms | `users` | `platforms` | Many-to-many | `user_platforms` |
-| A viewing history entry is labeled with tags | `viewing_history_entries` | `tags` | Many-to-many | `viewing_history_tags` |
-
----
-
-## Design Notes
-
-**Why is `username` stored as a column and not computed from `first_name + last_name`?**
-`username` is stored as an independent field to support user privacy and future modification (Won't Have user story). A user may want a display name that differs from their real name, and must be able to change it without affecting authentication data. Storing it separately keeps it independent from identity fields.
-
-**Why there is no `films` table?**
-Film-like does not store film metadata locally. Film details such as title, poster, synopsis, cast, runtime, and streaming platforms are fetched from TMDB.
-The database only stores the tmdb_id, which is enough to retrieve the full film information when needed.
-This avoids duplicating external data and keeps the local database simpler.
-
-**Why `User`, `WatchlistEntry`, and `ViewingHistoryEntry` use UUIDs?**
-These entities are linked to user data. UUIDs are less predictable than sequential integers, which is safer for user-owned resources.
-
-**Why Tag and Platform use integer IDs?**
-Tags and platforms are fixed reference data managed by the application. They are not sensitive user-owned resources, so integer IDs are simple and efficient.
-
-**Why join tables are needed?**
-`user_platforms` is required because one user can subscribe to many platforms, and one platform can be linked to many users.
-`viewing_history_tags` is required because one viewing history entry can have many tags, and one tag can be used by many entries.
-
-**Why created_at is used as the watch date?**
-A `ViewingHistoryEntry` is created when the user marks a film as watched. Therefore, its `created_at` field can represent the watch date without adding a separate `watched_at` column.
-
-**Why `mark_as_watched()` is a transactional operation across two tables?**
-When a user marks a watchlisted film as watched, the application creates a new row in `viewing_history_entries` and immediately deletes the corresponding row in `watchlist_entries` - both in a single database transaction.
-If either operation fails, the transaction is rolled back to avoid data inconsistency (a film disappearing from the watchlist without appearing in the history, or appearing in both simultaneously).
-No foreign key relationship exists between the two tables: the link is purely logical, handled at the service layer.
-
-### Prestige Tier Values
-
-The prestige_tier enum can contain:
-
-| Value |	Meaning |
-|---|---|
-| PLATINUM |	Personal masterpiece |
-| GOLD |	Excellent film |
-| SILVER |	Good film |
-| BRONZE |	Average but watchable |
-| TRASH |	Poor film |
-
----
+The current source also has no operation that moves a watchlist entry into viewing history, because the watchlist model and related layers have not been implemented.
 
 ## Author
 
-**Félix Besançon**
-Holberton School Bordeaux - Bachelor CDA, Year 1
-Specialisation: Fullstack Development & Machine Learning
+**zahin-dev**
 
 - GitHub: [@zahin-dev](https://github.com/zahin-dev)
-
----

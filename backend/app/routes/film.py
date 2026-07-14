@@ -70,10 +70,9 @@ def get_history(
     """
     Retrieve the authenticated user's full viewing history.
 
-    Each entry contains the tmdb_id of the logged film, its tags,
-    prestige tier, and personal note. Film metadata (title, poster, etc.)
-    is not embedded — the frontend loads it via GET /films/{tmdb_id}
-    to avoid N sequential TMDB calls server-side.
+    Each entry contains the tmdb_id of the logged film, cached title and
+    poster URL, tags, prestige tier, and personal note. Caching the title
+    and poster URL avoids a separate TMDB request for every history item.
 
     Returns:
         list[ViewingHistoryEntryResponse]: All entries in the user's

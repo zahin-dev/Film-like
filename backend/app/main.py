@@ -14,7 +14,7 @@ from app.routes import auth, film, tag
 # Metadata (title, description, version) appears in the Swagger UI at /docs.
 app = FastAPI(
     title="Film-like API",
-    description="Personal film diary and AI-powered recommendation engine",
+    description="Personal film diary API with TMDB integration",
     version="0.1.0"
 )
 

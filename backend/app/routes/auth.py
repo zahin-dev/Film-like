@@ -7,7 +7,7 @@ and response forwarding. All business logic is delegated to auth_service.
 
 Routes:
     - POST /auth/register: create a new user account
-    - POST /auth/login: authenticate and receive a JWT token (coming soon)
+    - POST /auth/login: authenticate and receive a JWT token
 """
 
 from fastapi import APIRouter, Depends, status
