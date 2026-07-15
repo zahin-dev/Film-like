@@ -1,162 +1,133 @@
-# 🎬 Film-like - System Architecture
+# Film-like - System Architecture
 
-This document contains the architecture diagrams for the Film-like application.
-Two levels of detail are provided: a high-level overview and a detailed component view.
+This document separates the architecture represented by the current source tree from the product's planned architecture. A component appearing in the planned section must not be interpreted as implemented.
 
----
+## Current Architecture
 
-## Table of Contents
+The current source contains a React frontend, FastAPI route and service layers, SQLAlchemy repositories backed by PostgreSQL, and a TMDB client.
 
-- [1. High-Level Architecture Overview](#high-level-architecture-overview)
-  - [1.1. Component Interactions](#component-interactions)
-- [2. Detailed Component Architecture](#detailed-component-architecture)
-  - [2.1. Component Interactions](#component-interactions-1)
-- [3. Design Patterns](#design-patterns)
-- [4. Author](#author)
-
----
-
-## High-Level Architecture Overview
-
-This diagram shows the four main components of the system and how they communicate.
+The authentication page is implemented. The dashboard, catalog, film-detail, recommendation, and profile routes exist in React Router but currently render placeholder components.
 
 ```mermaid
-architecture-beta
-    group frontend(cloud)[Frontend React Tailwind]
-        service react(server)[React Components] in frontend
-        service router(server)[React Router] in frontend
+flowchart LR
+    User["Browser user"]
 
-    group backend(cloud)[Backend FastAPI]
-        service api(server)[FastAPI REST API] in backend
-
-    group database(cloud)[Database]
-        service db(database)[PostgreSQL] in database
-
-    group external(cloud)[External Services]
-        service tmdb(internet)[TMDB API] in external
-        service mistral(internet)[Mistral AI] in external
-
-    react:R --> L:router
-    router:R --> L:api
-    api{group}:B --> T:db{group}
-    api{group}:R --> L:tmdb
-    api:R --> L:mistral
-```
-
-### Component Interactions
-
-| From | To | Description |
-|---|---|---|
-| React Components | React Router | User actions trigger client-side navigation |
-| React Router | FastAPI REST API | HTTP/HTTPS requests with JSON payloads |
-| FastAPI REST API | PostgreSQL | SQL queries for all persistent data (users, films, watchlist, tags) |
-| FastAPI REST API | TMDB API | Fetches film metadata (title, poster, synopsis, cast) and streaming availability |
-| FastAPI REST API | Mistral AI | Sends mood and viewing history as a prompt, receives film recommendations in JSON |
-
----
-
-## Detailed Component Architecture
-
-This diagram zooms into the internal structure of the backend, showing the API routes, services, repositories, and their connections to the database and external services.
-
-```mermaid
-flowchart TD
-    User(["User\n(Browser)"])
-
-    subgraph Frontend["Frontend: React + Tailwind CSS"]
-        React["React Components"]
+    subgraph Frontend["React frontend"]
+        AuthPage["Authentication page"]
         Router["React Router"]
+        Placeholders["Placeholder pages<br/>dashboard, catalog, film detail,<br/>recommendations, profile"]
+        AuthContext["Auth context and Axios client"]
     end
 
-    Calls(["REST calls"])
-
-    subgraph Backend["Backend: Python + FastAPI"]
-        subgraph Routes["API Routes"]
-            AuthR["/auth/*"]
-            FilmR["/films/*"]
-            UserR["/users/*"]
-            RecoR["/recommendations/*"]
+    subgraph Backend["FastAPI backend source"]
+        subgraph Routes["Registered routes"]
+            RootRoute["GET /"]
+            AuthRoutes["POST /auth/register<br/>POST /auth/login"]
+            FilmRoutes["GET /films/search<br/>GET /films/history<br/>GET /films/{tmdb_id}<br/>POST /films/log<br/>DELETE /films/log/{tmdb_id}"]
+            TagRoutes["GET /tags"]
         end
+
         subgraph Services["Services"]
-            AuthS["Auth Service (JWT)"]
-            FilmS["Film Service"]
-            UserS["User Service"]
-            RecoF["Recommendation Facade"]
+            AuthService["Authentication service"]
+            FilmService["Film service"]
+            HistoryService["Viewing-history service"]
         end
-        subgraph Repos["Repositories"]
-            UserRepo["User\nRepository"]
-            ViewingHistoryRepo["Viewing history\nRepository"]
-            WatchlistRepo["Watchlist\nRepository"]
+
+        subgraph Repositories["Repositories"]
+            UserRepository["User repository"]
+            HistoryRepository["Viewing-history repository"]
         end
+
+        TMDBClient["TMDB client"]
     end
 
-    subgraph Database["Database"]
-        DB[("PostgreSQL")]
-    end
+    PostgreSQL[("PostgreSQL")]
+    TMDB["TMDB API"]
 
-    subgraph External["External Services"]
-        TMDB["TMDB API"]
-        Mistral["Mistral AI"]
-    end
-
-    User -->|"Uses app"| Frontend
-    React --> Router
-    Router --- Calls
-    Calls -->|"HTTP/HTTPS – JSON"| AuthR & FilmR & UserR & RecoR
-
-    AuthR --> AuthS
-    FilmR --> FilmS
-    UserR --> UserS
-    RecoR --> RecoF
-
-    AuthS & UserS --> UserRepo
-    FilmS --> ViewingHistoryRepo & WatchlistRepo
-    FilmS -->|"Film metadata"| TMDB
-    RecoF -->|"Streaming availability"| TMDB
-    RecoF -->|"Mood-based prompt"| Mistral
-
-    UserRepo & ViewingHistoryRepo & WatchlistRepo -->|"SQL queries"| DB
-
-    TMDB ~~~ Mistral
+    User -. "direct health check" .-> RootRoute
+    User --> Router
+    Router --> AuthPage
+    Router --> Placeholders
+    AuthPage --> AuthContext
+    AuthContext --> AuthRoutes
+    AuthContext -. "available to future page integrations" .-> FilmRoutes
+    AuthRoutes --> AuthService
+    FilmRoutes --> FilmService
+    FilmRoutes --> HistoryService
+    TagRoutes --> HistoryService
+    AuthService --> UserRepository
+    HistoryService --> HistoryRepository
+    FilmService --> HistoryRepository
+    FilmService --> TMDBClient
+    HistoryService --> TMDBClient
+    UserRepository --> PostgreSQL
+    HistoryRepository --> PostgreSQL
+    TMDBClient --> TMDB
 ```
 
-### Component Interactions
+### Current Component Responsibilities
 
-| From | To | Description |
-|---|---|---|
-| User | React Components | The user interacts with the app through the browser |
-| React Components | React Router | Navigation between pages is handled client-side without full page reloads |
-| React Router | API Routes | All backend communication goes through HTTP/HTTPS calls with JSON payloads |
-| /auth/* | Auth Service | Handles registration, login, and JWT token generation and validation |
-| /films/* | Film Service | Handles film search, logging, tagging, and watchlist management |
-| /users/* | User Service | Handles user profile and streaming platform preferences |
-| /recommendations/* | Recommendation Facade | Orchestrates the full recommendation flow (mood + swipe + LLM) |
-| Auth Service | User Repository | Reads and writes user authentication data |
-| Film Service | Viewing History Repository | Reads and writes film logging and tag data |
-| Film Service | Watchlist Repository | Reads and writes watchlist entries |
-| Film Service | TMDB API | Fetches film metadata (poster, synopsis, cast, genres, runtime) and streaming availability |
-| Recommendation Facade | TMDB API | Fetches streaming availability for recommended films |
-| Recommendation Facade | Mistral AI | Sends a structured prompt with mood and viewing history, receives film suggestions in JSON |
-| All Repositories | PostgreSQL | All persistent data is stored and retrieved via SQL queries |
+| Component | Current responsibility |
+|---|---|
+| Root route | Return a basic API health/status message |
+| React authentication page | Submits registration and login requests, displays API errors, and redirects after authentication |
+| Auth context and Axios client | Stores the JWT in session storage and adds it to outgoing requests |
+| Auth routes and service | Register users, hash and verify passwords, and issue JWT access tokens |
+| Film routes and service | Search TMDB, retrieve complete film details and watch-provider names, and report `in_history` status |
+| Tag route | Return application-managed reference tags |
+| Viewing-history service | Create, list, and remove history entries; resolve tags; cache title and poster URL at log time |
+| User repository | Read and create users |
+| Viewing-history repository | Read tags and create, query, or delete viewing-history entries |
+| PostgreSQL | Store users, tags, viewing-history entries, and tag associations |
+| TMDB API | Provide complete film metadata and watch-provider data |
 
----
+The source follows service and repository separation: routes handle HTTP concerns, services coordinate business logic and external calls, and repositories perform database access. There is no Recommendation Facade in the current source.
 
-## Design Patterns
+> **Repository completeness note:** current route and service modules import `app.schemas`, but the package is absent from the current Git tree. The diagram reflects the checked-in route, service, repository, model, migration, frontend, and test source; it does not claim a successfully importable runtime in this checkout.
 
-| Pattern | Where applied | Reason |
-|---|---|---|
-| **Repository** | Data access layer | Isolates all database queries from business logic. Each entity (User, Viewing history, Watchlist) has its own repository, making the code easier to maintain and test. |
-| **Facade** | Recommendation Service | Hides the complexity of orchestrating user data and external APIs (TMDB for the films and Mistral AI for the LLM) behind a single clean interface. The route only calls one method - the facade handles everything else. |
-| **REST** | API design | Standard architectural style for web APIs - stateless, resource-based, JSON responses. Consumed by the React frontend. |
+## Target Architecture - Planned, Not Current
 
----
+The following diagram is a product target only. None of the watchlist, profile, platform-preference, recommendation, or Mistral components shown here exist as working backend source in the current repository.
+
+```mermaid
+flowchart LR
+    WorkingUI["Completed React pages<br/>dashboard, catalog, film detail,<br/>profile, mood and swipe flows"]
+
+    subgraph PlannedBackend["Planned backend components - not implemented"]
+        WatchlistAPI["Watchlist API and service"]
+        ProfileAPI["Profile and platform-preference API"]
+        RecommendationAPI["Recommendation routes"]
+        RecommendationFacade["Recommendation Facade"]
+        PlannedRepos["Watchlist and platform repositories"]
+    end
+
+    PlannedTables[("Planned watchlist and<br/>platform-preference tables")]
+    Mistral["Mistral AI"]
+    TMDBFuture["TMDB API"]
+
+    WorkingUI --> WatchlistAPI
+    WorkingUI --> ProfileAPI
+    WorkingUI --> RecommendationAPI
+    WatchlistAPI --> PlannedRepos
+    ProfileAPI --> PlannedRepos
+    PlannedRepos --> PlannedTables
+    RecommendationAPI --> RecommendationFacade
+    RecommendationFacade --> Mistral
+    RecommendationFacade --> TMDBFuture
+```
+
+Planned behavior includes:
+
+- Watchlist creation, retrieval, deletion, and conversion to viewing history
+- Profile management and stored streaming-platform subscriptions
+- A mood questionnaire and swipe interface
+- Recommendation routes backed by a Recommendation Facade
+- Mistral AI calls and recommendation enrichment through TMDB
+- Recommendation filtering based on stored platform subscriptions
 
 ## Author
 
-**Félix Besançon**
-Holberton School Bordeaux - Bachelor CDA, Year 1
-Specialisation: Fullstack Development & Machine Learning
+**zahin-dev**
 
+- University: Kanagawa Institute of Technology
 - GitHub: [@zahin-dev](https://github.com/zahin-dev)
-
----

@@ -4,8 +4,8 @@ User
 This module defines the User SQLAlchemy model, representing a registered
 user of the Film-like application.
 
-It covers authentication data, profile information, and streaming platform
-preferences. Passwords are never stored in plain text - hashing is handled
+It covers authentication data and the profile fields currently stored at
+registration. Passwords are never stored in plain text - hashing is handled
 by the authentication service before this model is populated.
 """
 
@@ -37,8 +37,8 @@ class User(BaseModel):
             The plain-text password is never stored.
         is_admin (bool): Administrative flag. Defaults to False.
             Reserved for future admin features.
-        age (int): Optional. Used to filter recommendations by age rating
-            (US-14, Could Have).
+        age (int): Optional profile value. Age-based filtering is planned
+            but is not implemented in the current recommendation-free backend.
 
     Notes:
         Validation of email format and password complexity is handled

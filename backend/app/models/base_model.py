@@ -19,7 +19,7 @@ class BaseModel(Base):
     """
     Abstract base class for all persistent SQLAlchemy models.
 
-    Inherited by: User, WatchlistEntry, ViewingHistoryEntry.
+    Inherited by: User and ViewingHistoryEntry.
 
     This class provides the three attributes shared by every entity,
     avoiding duplication across the codebase.
