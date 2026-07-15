@@ -4,7 +4,7 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
 })
 
-// Interceptor : inject JWT token in every request automatically
+// Inject the JWT into every API request from one central location.
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem('token')
   if (token) {
@@ -13,12 +13,13 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Interceptor : handle global errors (401, 500, etc.)
+// Clear the local session when the backend rejects an expired or invalid JWT.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       sessionStorage.removeItem('token')
+      sessionStorage.removeItem('user')
       window.location.href = '/'
     }
     return Promise.reject(error)
