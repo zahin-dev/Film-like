@@ -21,9 +21,10 @@ flowchart LR
 
     subgraph Backend["FastAPI backend source"]
         subgraph Routes["Registered routes"]
-            AuthRoutes["/auth/register<br/>/auth/login"]
-            FilmRoutes["/films/search<br/>/films/history<br/>/films/{tmdb_id}<br/>/films/log"]
-            TagRoutes["/tags"]
+            RootRoute["GET /"]
+            AuthRoutes["POST /auth/register<br/>POST /auth/login"]
+            FilmRoutes["GET /films/search<br/>GET /films/history<br/>GET /films/{tmdb_id}<br/>POST /films/log<br/>DELETE /films/log/{tmdb_id}"]
+            TagRoutes["GET /tags"]
         end
 
         subgraph Services["Services"]
@@ -43,6 +44,7 @@ flowchart LR
     PostgreSQL[("PostgreSQL")]
     TMDB["TMDB API"]
 
+    User -. "direct health check" .-> RootRoute
     User --> Router
     Router --> AuthPage
     Router --> Placeholders
@@ -67,6 +69,7 @@ flowchart LR
 
 | Component | Current responsibility |
 |---|---|
+| Root route | Return a basic API health/status message |
 | React authentication page | Submits registration and login requests, displays API errors, and redirects after authentication |
 | Auth context and Axios client | Stores the JWT in session storage and adds it to outgoing requests |
 | Auth routes and service | Register users, hash and verify passwords, and issue JWT access tokens |
@@ -126,4 +129,5 @@ Planned behavior includes:
 
 **zahin-dev**
 
+- University: Kanagawa Institute of Technology
 - GitHub: [@zahin-dev](https://github.com/zahin-dev)

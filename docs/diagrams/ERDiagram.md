@@ -105,4 +105,5 @@ The current source also has no operation that moves a watchlist entry into viewi
 
 **zahin-dev**
 
+- University: Kanagawa Institute of Technology
 - GitHub: [@zahin-dev](https://github.com/zahin-dev)

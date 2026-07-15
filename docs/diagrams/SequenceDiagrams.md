@@ -227,4 +227,5 @@ Watchlist and user-profile operations are also planned. No `/films/watchlist`, `
 
 **zahin-dev**
 
+- University: Kanagawa Institute of Technology
 - GitHub: [@zahin-dev](https://github.com/zahin-dev)

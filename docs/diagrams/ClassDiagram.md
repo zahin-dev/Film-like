@@ -149,4 +149,5 @@ Film routes and services reference `Film`, `FilmWithStatus`, and viewing-history
 
 **zahin-dev**
 
+- University: Kanagawa Institute of Technology
 - GitHub: [@zahin-dev](https://github.com/zahin-dev)
