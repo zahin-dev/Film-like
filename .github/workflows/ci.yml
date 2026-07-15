@@ -19,9 +19,9 @@ jobs:
       run:
         working-directory: backend
     env:
-      DATABASE_URL: sqlite:///:memory:
-      SECRET_KEY: film-like-ci-secret-key
-      TMDB_READ_ACCESS_TOKEN: film-like-ci-tmdb-token
+      DATABASE_URL: "sqlite:///:memory:"
+      SECRET_KEY: "film-like-ci-secret-key"
+      TMDB_READ_ACCESS_TOKEN: "film-like-ci-tmdb-token"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
