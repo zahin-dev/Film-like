@@ -507,7 +507,7 @@ class TestGetHistory:
 
         assert response.status_code == status.HTTP_200_OK
         assert max_active_calls == 2
-        assert [entry["tmdb_id"] for entry in response.json()] == [TMDB_ID, 550]
+        assert [entry["tmdb_id"] for entry in response.json()] == [550, TMDB_ID]
 
     def test_one_tmdb_failure_keeps_every_persisted_entry(
         self, client, auth_headers, db_session

@@ -95,7 +95,7 @@ async def get_movie_basic(tmdb_id: int) -> dict:
 
     Lighter alternative to get_movie_details() — does not request
     credits, so it is faster and should be used when only title and
-    poster are needed (e.g. at viewing history log time).
+    poster are needed (e.g. viewing-history display enrichment).
 
     Args:
         tmdb_id (int): The TMDB unique identifier of the movie.
