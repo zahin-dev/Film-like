@@ -15,6 +15,9 @@ Functions:
     - remove_entry: remove a film from the user's viewing history
 """
 
+import asyncio
+
+import httpx
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from app.repositories import viewing_history_repository
@@ -52,10 +55,9 @@ async def create_entry(
     """
     Log a new film in the user's viewing history.
 
-    Fetches the film title and poster from TMDB at log time so the
-    history list can be displayed without additional API calls later.
-    Resolves tag IDs to Tag instances and delegates persistence to
-    the repository.
+    Validates the film with TMDB, resolves tag IDs to Tag instances, and
+    delegates persistence to the repository. Film metadata is included in the
+    response but is never stored in the application database.
 
     Args:
         db (Session): SQLAlchemy database session, injected by FastAPI.
@@ -72,25 +74,19 @@ async def create_entry(
         httpx.RequestError: If the TMDB request cannot be sent.
     """
     film_data = await tmdb_client.get_movie_basic(payload.tmdb_id)
-    title = film_data.get("title")
-    poster_path = film_data.get("poster_path")
-    poster_url = _POSTER_BASE_URL + poster_path if poster_path else None
-
     tags = viewing_history_repository.get_tags_by_ids(db, payload.tag_ids)
     entry = ViewingHistoryEntry(
         user_id=user.id,
         tmdb_id=payload.tmdb_id,
-        title=title,
-        poster_url=poster_url,
         tags=tags,
         prestige_tier=payload.prestige_tier,
         personal_note=payload.personal_note
     )
     created = viewing_history_repository.create(db, entry)
-    return ViewingHistoryEntryResponse.model_validate(created)
+    return _entry_response(created, film_data)
 
 
-def get_history(
+async def get_history(
     db: Session, user: User
 ) -> list[ViewingHistoryEntryResponse]:
     """
@@ -101,11 +97,40 @@ def get_history(
         user (User): The authenticated user, injected by get_current_user.
 
     Returns:
-        list[ViewingHistoryEntryResponse]: All viewing history entries
-            belonging to the user. Returns an empty list if none exist.
+        list[ViewingHistoryEntryResponse]: All viewing history entries,
+            enriched concurrently with current TMDB title and poster data.
+            If an individual lookup fails, that entry is retained with null
+            display metadata. Returns an empty list if none exist.
     """
     entries = viewing_history_repository.get_by_user(db, user.id)
-    return [ViewingHistoryEntryResponse.model_validate(entry) for entry in entries]
+    return await asyncio.gather(*(_enrich_entry(entry) for entry in entries))
+
+
+async def _enrich_entry(
+    entry: ViewingHistoryEntry,
+) -> ViewingHistoryEntryResponse:
+    """Resolve display metadata for one entry without affecting persistence."""
+    try:
+        film_data = await tmdb_client.get_movie_basic(entry.tmdb_id)
+    except httpx.HTTPError:
+        film_data = None
+    return _entry_response(entry, film_data)
+
+
+def _entry_response(
+    entry: ViewingHistoryEntry,
+    film_data: dict | None,
+) -> ViewingHistoryEntryResponse:
+    """Build an API response from persisted reactions and transient metadata."""
+    response = ViewingHistoryEntryResponse.model_validate(entry)
+    if not film_data:
+        return response
+
+    poster_path = film_data.get("poster_path")
+    return response.model_copy(update={
+        "title": film_data.get("title"),
+        "poster_url": _POSTER_BASE_URL + poster_path if poster_path else None,
+    })
 
 
 def remove_entry(

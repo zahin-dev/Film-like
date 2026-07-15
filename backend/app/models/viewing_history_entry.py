@@ -4,11 +4,10 @@ Viewing History Entry
 This module defines the ViewingHistoryEntry SQLAlchemy model, representing
 a single film logged by a user in their personal viewing history.
 
-Each entry links a user to a TMDB film, caches its title and poster URL for
-history-list display, and stores the user's personal reaction: an optional
-prestige tier rating, free-text note, and a set of mood/quality tags chosen
-from the shared tag list. TMDB remains the source of truth for complete film
-metadata.
+Each entry links a user to a TMDB film by identifier and stores the user's
+personal reaction: an optional prestige tier rating, free-text note, and a set
+of mood/quality tags chosen from the shared tag list. TMDB remains the source
+of truth for all film metadata.
 
 The many-to-many relationship between entries and tags is handled by the
 viewing_history_tags association table defined in this module.
@@ -44,12 +43,7 @@ class ViewingHistoryEntry(BaseModel):
     Attributes:
         user_id (UUID): Foreign key to the user who logged this entry.
         tmdb_id (int): TMDB identifier of the film. Not a foreign key.
-            Complete metadata is fetched from TMDB; title and poster URL
-            are cached in this entry.
-        title (str, optional): Film title cached at log time to avoid
-            a TMDB call when displaying the history list.
-        poster_url (str, optional): Full poster URL cached at log time
-            for the same reason. None if TMDB had no poster.
+            Film metadata is fetched from TMDB when a response needs it.
         tags (list[Tag]): Mood/quality labels chosen by the user.
             Loaded eagerly (lazy="joined") since tags are always needed
             when displaying a history entry.
@@ -67,12 +61,6 @@ class ViewingHistoryEntry(BaseModel):
     )
     tmdb_id: Mapped[int] = mapped_column(
         nullable=False
-    )
-    title: Mapped[str | None] = mapped_column(
-        nullable=True
-    )
-    poster_url: Mapped[str | None] = mapped_column(
-        nullable=True
     )
     tags: Mapped[list["Tag"]] = relationship(
         "Tag",

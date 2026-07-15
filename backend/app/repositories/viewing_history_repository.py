@@ -96,8 +96,7 @@ def get_by_user(db: Session, user_id: UUID) -> list[ViewingHistoryEntry]:
     """
     Retrieve all viewing history entries for a given user.
 
-    Results are not ordered — ordering by created_at can be added
-    at the route level if needed.
+    Results are ordered by creation time and UUID for deterministic responses.
 
     Args:
         db (Session): SQLAlchemy database session.
@@ -113,6 +112,7 @@ def get_by_user(db: Session, user_id: UUID) -> list[ViewingHistoryEntry]:
     return db.execute(
         select(ViewingHistoryEntry)
         .where(ViewingHistoryEntry.user_id == user_id)
+        .order_by(ViewingHistoryEntry.created_at, ViewingHistoryEntry.id)
     ).unique().scalars().all()
 
 

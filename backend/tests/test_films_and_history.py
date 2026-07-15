@@ -13,14 +13,18 @@ Covers:
 TMDB API calls are mocked with AsyncMock — no real network calls are made.
 """
 
+import asyncio
+
 import pytest
 import httpx
 import jwt
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta, timezone
 from fastapi import status
+from sqlalchemy import select
 
 from app.models.tag import Tag
+from app.models.viewing_history_entry import ViewingHistoryEntry
 from app.config import settings
 
 
@@ -74,6 +78,15 @@ def make_http_error(status_code: int) -> httpx.HTTPStatusError:
     mock_response = MagicMock()
     mock_response.status_code = status_code
     return httpx.HTTPStatusError("error", request=MagicMock(), response=mock_response)
+
+
+def get_enriched_history(client, headers, film_data=MOCK_MOVIE_BASIC):
+    """Fetch history with deterministic TMDB display metadata."""
+    with patch(
+        "app.external.tmdb_client.get_movie_basic",
+        new=AsyncMock(return_value=film_data),
+    ):
+        return client.get("/films/history", headers=headers)
 
 
 # ---------------------------------------------------------------------------
@@ -314,12 +327,38 @@ class TestLogFilm:
             res = client.post("/films/log", json={"tmdb_id": TMDB_ID}, headers=auth_headers)
         assert res.status_code == status.HTTP_201_CREATED
 
-    def test_caches_title_and_poster(self, client, auth_headers):
+    def test_returns_transient_title_and_poster(self, client, auth_headers):
         with patch("app.external.tmdb_client.get_movie_basic",
                    new=AsyncMock(return_value=MOCK_MOVIE_BASIC)):
             body = client.post("/films/log", json={"tmdb_id": TMDB_ID}, headers=auth_headers).json()
         assert body["title"] == "Inception"
         assert body["poster_url"].startswith("https://image.tmdb.org")
+
+    def test_persists_only_tmdb_id_and_reaction(
+        self, client, auth_headers, seeded_tags, db_session
+    ):
+        payload = {
+            "tmdb_id": TMDB_ID,
+            "tag_ids": [seeded_tags[0].id],
+            "prestige_tier": "Gold",
+            "personal_note": "Dream logic done right.",
+        }
+        with patch("app.external.tmdb_client.get_movie_basic",
+                   new=AsyncMock(return_value=MOCK_MOVIE_BASIC)):
+            response = client.post(
+                "/films/log", json=payload, headers=auth_headers
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        entry = db_session.execute(
+            select(ViewingHistoryEntry)
+        ).unique().scalars().one()
+        assert entry.tmdb_id == TMDB_ID
+        assert entry.prestige_tier.value == "Gold"
+        assert entry.personal_note == "Dream logic done right."
+        assert [tag.id for tag in entry.tags] == [seeded_tags[0].id]
+        assert "title" not in ViewingHistoryEntry.__table__.columns
+        assert "poster_url" not in ViewingHistoryEntry.__table__.columns
 
     def test_response_has_timestamps_and_id(self, client, auth_headers):
         with patch("app.external.tmdb_client.get_movie_basic",
@@ -404,17 +443,17 @@ class TestGetHistory:
         assert res.json() == []
 
     def test_contains_logged_film(self, client, auth_headers, logged_film):
-        entries = client.get("/films/history", headers=auth_headers).json()
+        entries = get_enriched_history(client, auth_headers).json()
         assert len(entries) == 1
         assert entries[0]["tmdb_id"] == TMDB_ID
 
     def test_entry_has_title_and_poster(self, client, auth_headers, logged_film):
-        entry = client.get("/films/history", headers=auth_headers).json()[0]
+        entry = get_enriched_history(client, auth_headers).json()[0]
         assert entry["title"] == "Inception"
         assert entry["poster_url"].startswith("https://image.tmdb.org")
 
     def test_entry_has_empty_tags_by_default(self, client, auth_headers, logged_film):
-        entry = client.get("/films/history", headers=auth_headers).json()[0]
+        entry = get_enriched_history(client, auth_headers).json()[0]
         assert entry["tags"] == []
 
     def test_entry_includes_tags_when_logged_with_tags(self, client, auth_headers, seeded_tags):
@@ -423,7 +462,7 @@ class TestGetHistory:
             client.post("/films/log",
                         json={"tmdb_id": TMDB_ID, "tag_ids": [seeded_tags[0].id]},
                         headers=auth_headers)
-        entry = client.get("/films/history", headers=auth_headers).json()[0]
+        entry = get_enriched_history(client, auth_headers).json()[0]
         assert len(entry["tags"]) == 1
         assert entry["tags"][0]["name"] == seeded_tags[0].name
 
@@ -439,7 +478,63 @@ class TestGetHistory:
         with patch("app.external.tmdb_client.get_movie_basic",
                    new=AsyncMock(return_value=other)):
             client.post("/films/log", json={"tmdb_id": 550}, headers=auth_headers)
-        assert len(client.get("/films/history", headers=auth_headers).json()) == 2
+        assert len(get_enriched_history(client, auth_headers).json()) == 2
+
+    def test_enriches_multiple_entries_concurrently(self, client, auth_headers):
+        other = {**MOCK_MOVIE_BASIC, "id": 550, "title": "Fight Club"}
+        for movie in (MOCK_MOVIE_BASIC, other):
+            with patch("app.external.tmdb_client.get_movie_basic",
+                       new=AsyncMock(return_value=movie)):
+                client.post(
+                    "/films/log", json={"tmdb_id": movie["id"]},
+                    headers=auth_headers,
+                )
+
+        active_calls = 0
+        max_active_calls = 0
+
+        async def delayed_lookup(tmdb_id):
+            nonlocal active_calls, max_active_calls
+            active_calls += 1
+            max_active_calls = max(max_active_calls, active_calls)
+            await asyncio.sleep(0)
+            active_calls -= 1
+            return MOCK_MOVIE_BASIC if tmdb_id == TMDB_ID else other
+
+        with patch("app.external.tmdb_client.get_movie_basic",
+                   new=AsyncMock(side_effect=delayed_lookup)):
+            response = client.get("/films/history", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert max_active_calls == 2
+        assert [entry["tmdb_id"] for entry in response.json()] == [TMDB_ID, 550]
+
+    def test_one_tmdb_failure_keeps_every_persisted_entry(
+        self, client, auth_headers, db_session
+    ):
+        other = {**MOCK_MOVIE_BASIC, "id": 550, "title": "Fight Club"}
+        for movie in (MOCK_MOVIE_BASIC, other):
+            with patch("app.external.tmdb_client.get_movie_basic",
+                       new=AsyncMock(return_value=movie)):
+                client.post(
+                    "/films/log", json={"tmdb_id": movie["id"]},
+                    headers=auth_headers,
+                )
+
+        with patch(
+            "app.external.tmdb_client.get_movie_basic",
+            new=AsyncMock(side_effect=[MOCK_MOVIE_BASIC, make_http_error(503)]),
+        ):
+            response = client.get("/films/history", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.json()) == 2
+        assert response.json()[1]["title"] is None
+        assert response.json()[1]["poster_url"] is None
+        persisted = db_session.execute(
+            select(ViewingHistoryEntry)
+        ).unique().scalars().all()
+        assert len(persisted) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -474,9 +569,9 @@ class TestRemoveFilm:
         assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_other_users_entry_still_exists_after_failed_remove(
-            self, client, auth_headers, other_auth_headers, logged_film):
+        self, client, auth_headers, other_auth_headers, logged_film):
         client.delete(f"/films/log/{TMDB_ID}", headers=other_auth_headers)
-        assert len(client.get("/films/history", headers=auth_headers).json()) == 1
+        assert len(get_enriched_history(client, auth_headers).json()) == 1
 
 
 # ---------------------------------------------------------------------------
