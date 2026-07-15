@@ -1,8 +1,8 @@
-# Film-like - Class Diagram
+# Film-like - Class and Contract Diagram
 
-This document describes the model classes present in the current backend source. Planned concepts are listed separately and are not shown as implemented classes.
+This diagram shows the current persistent models and principal Pydantic contracts. Film metadata and recommendation candidates are API data, not local database entities.
 
-## Current Model Classes
+## Current Models and Contracts
 
 ```mermaid
 classDiagram
@@ -31,8 +31,6 @@ class ViewingHistoryEntry {
     <<SQLAlchemy entity>>
     +UUID user_id
     +int tmdb_id
-    +str title
-    +str poster_url
     +List~Tag~ tags
     +PrestigeTier prestige_tier
     +str personal_note
@@ -55,95 +53,104 @@ class PrestigeTier {
     TRASH = Trash
 }
 
+class Film {
+    <<Pydantic TMDB data>>
+    +int tmdb_id
+    +str title
+    +int year
+    +List~str~ genres
+    +str poster_url
+    +str synopsis
+    +str director
+    +List~str~ cast
+    +int runtime
+    +List~str~ streaming_platforms
+}
+
+class ViewingHistoryEntryResponse {
+    <<Pydantic API response>>
+    +UUID id
+    +int tmdb_id
+    +str title
+    +str poster_url
+    +List~TagResponse~ tags
+    +PrestigeTier prestige_tier
+    +str personal_note
+    +datetime created_at
+    +datetime updated_at
+}
+
+class RecommendationRequest {
+    <<Pydantic request>>
+    +Mood mood
+    +int limit
+}
+
+class RecommendationResponse {
+    <<Pydantic response>>
+    +Mood mood
+    +List~str~ history_tags_used
+    +List~Recommendation~ recommendations
+}
+
+class Recommendation {
+    <<verified result>>
+    +Film film
+    +str reason
+}
+
 BaseModel <|-- User
 BaseModel <|-- ViewingHistoryEntry
 User "1" --> "0..*" ViewingHistoryEntry : owns by user_id
 ViewingHistoryEntry "0..*" --> "0..*" Tag : viewing_history_tags
 ViewingHistoryEntry --> "0..1" PrestigeTier : optional rating
+ViewingHistoryEntryResponse ..> ViewingHistoryEntry : persisted fields
+ViewingHistoryEntryResponse ..> Film : transient title and poster
+RecommendationResponse *-- Recommendation
+Recommendation *-- Film
 ```
 
-## Class Descriptions
+Optional values are represented compactly in Mermaid; see `backend/app/schemas` for exact nullability and validation constraints.
 
-### `BaseModel`
-
-`BaseModel` is abstract and supplies `id`, `created_at`, and `updated_at` mapped columns to `User` and `ViewingHistoryEntry`. It does not define `save()` or `delete()` instance methods; persistence is handled by repository functions and SQLAlchemy sessions.
+## Persistent Model Responsibilities
 
 ### `User`
 
-`User` stores registration and authentication data:
-
-| Attribute | Current behavior |
-|---|---|
-| `first_name`, `last_name` | Required registration fields |
-| `username` | Generated as `first_name + last_name` during registration |
-| `email` | Unique login identifier |
-| `hashed_password` | bcrypt password hash |
-| `is_admin` | Defaults to `False`; reserved for future admin behavior |
-| `age` | Optional stored value; no age-based filtering currently uses it |
-
-The only method defined on the model is `verify_password()`, which compares a supplied password with the stored bcrypt hash.
-
-The current `User` class does not define watchlist, platform-preference, profile-update, or recommendation methods.
+`User` stores registration/authentication fields plus optional age and a reserved admin flag. Passwords are bcrypt hashes. Public `UserResponse` excludes `hashed_password` and `is_admin`.
 
 ### `ViewingHistoryEntry`
 
-`ViewingHistoryEntry` belongs to a user and records a film diary entry. It stores:
+The entity stores only the user's relationship to a film and their reaction:
 
-- the TMDB identifier
-- a nullable cached title
-- a nullable cached poster URL
-- zero or more tags through `viewing_history_tags`
-- a nullable prestige tier
-- a nullable personal note
+- `user_id` and `tmdb_id`;
+- zero or more shared tags;
+- optional prestige tier and personal note; and
+- inherited UUID/timestamps.
 
-TMDB remains the source of truth for complete film metadata. Caching title and poster URL allows history lists to render without retrieving complete metadata for each item.
+It has no `title`, `poster_url`, synopsis, genres, credits, runtime, or provider columns. The response schema includes nullable title/poster fields because the service derives them from TMDB at response time.
 
-The model defines mapped fields and the `tags` relationship but no instance methods. Creation, queries, and deletion are implemented by `viewing_history_service` and `viewing_history_repository`.
+### `Tag` and `PrestigeTier`
 
-### `Tag`
+Tags are seeded shared reference data. `PrestigeTier` stores the display values `Platinum`, `Gold`, `Silver`, `Bronze`, `Coal`, and `Trash`.
 
-`Tag` is application-managed reference data with an integer primary key, unique name, and description. It inherits directly from the SQLAlchemy `Base`, so it does not receive UUID or timestamp fields from `BaseModel`.
+## Service and Boundary Modules
 
-### `PrestigeTier`
-
-`PrestigeTier` is a Python enum stored through SQLAlchemy using each member's display value:
-
-| Python member | Stored value |
+| Module | Current responsibility |
 |---|---|
-| `PLATINUM` | `Platinum` |
-| `GOLD` | `Gold` |
-| `SILVER` | `Silver` |
-| `BRONZE` | `Bronze` |
-| `COAL` | `Coal` |
-| `TRASH` | `Trash` |
+| `auth_service` | Registration, login, password hashing, JWT creation |
+| `film_service` | Map TMDB search/details/providers into `Film` contracts |
+| `viewing_history_service` | Validate IDs, manage reactions, enrich history display metadata |
+| `recommendation_service` | Recommendation Facade: context aggregation, strict parsing, filtering, retry, TMDB verification |
+| `user_repository` | User database access |
+| `viewing_history_repository` | Tag/history database access and deterministic ordering |
+| `tmdb_client` | Outbound TMDB HTTP communication |
+| `mistral_client` | Outbound Mistral chat-completions communication with JSON Schema mode |
 
-## Service and Repository Structure
+The AI-only `AICandidate` and `AICandidateList` Pydantic models forbid extra fields, use strict types, constrain text, and reject empty candidate arrays. The facade additionally applies a release-year window based on the current year and deduplicates titles and resolved TMDB IDs.
 
-The current model layer is used by these source modules:
+## Future Concepts - Not Current Classes
 
-| Layer | Current modules and responsibilities |
-|---|---|
-| Authentication service | Registers users, hashes passwords, validates login, and creates JWTs |
-| Film service | Maps TMDB search, detail, credit, and watch-provider data and checks history status |
-| Viewing-history service | Resolves tags, caches title and poster URL, and coordinates history operations |
-| User repository | Retrieves users by email or ID and creates users |
-| Viewing-history repository | Retrieves tags and creates, lists, finds, or removes history entries |
-
-## Planned Concepts - Not Current Classes
-
-The following concepts appeared in earlier design documentation but have no corresponding current model, repository, and service implementation:
-
-- `WatchlistEntry`
-- `Platform` and stored user-platform relationships
-- Watchlist conversion methods such as `mark_as_watched()`
-- User methods for watchlists or platform preferences
-- Recommendation Facade and Mistral AI client classes
-
-The frontend also contains placeholder page components for the dashboard, catalog, film details, recommendations, and profile. Their presence in the router does not make those user-facing features complete.
-
-## Repository Completeness Note
-
-Film routes and services reference `Film`, `FilmWithStatus`, and viewing-history response schemas through imports from `app.schemas`. The `backend/app/schemas` package is absent from the current Git tree, so those schema definitions cannot be verified from this checkout and the backend cannot currently import successfully. They are therefore not presented as checked-in classes in the current class diagram.
+`WatchlistEntry`, locally stored `Film`, `Platform`, `UserPlatform`, profile-update models, social entities, and payment/subscription models do not exist in the current source. TMDB provider data is transient.
 
 ## Author
 
