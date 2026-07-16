@@ -37,8 +37,8 @@ class User(BaseModel):
             The plain-text password is never stored.
         is_admin (bool): Administrative flag. Defaults to False.
             Reserved for future admin features.
-        age (int): Optional profile value. Age-based filtering is planned
-            but is not implemented in the current recommendation-free backend.
+        age (int): Optional profile value. Age-based recommendation filtering
+            is not part of the current MVP.
 
     Notes:
         Validation of email format and password complexity is handled

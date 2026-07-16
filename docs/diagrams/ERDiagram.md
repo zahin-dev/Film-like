@@ -1,8 +1,6 @@
 # Film-like - Entity Relationship Diagram
 
-This document shows only the database objects created by the current SQLAlchemy models and Alembic migrations. It does not include planned watchlist, platform, or user-platform-preference tables.
-
-TMDB is used as the source of truth for complete film metadata. The application stores the TMDB identifier and caches the film title and poster URL in viewing-history entries so that history lists can be displayed without an additional TMDB request for every item.
+This diagram shows the database after the current Alembic head. TMDB remains the source of truth for every film metadata field; Film-like persists only the TMDB identifier for film identity.
 
 ## Current Database Schema
 
@@ -25,8 +23,6 @@ erDiagram
         uuid id PK
         uuid user_id FK
         integer tmdb_id
-        text title "nullable cached value"
-        text poster_url "nullable cached value"
         prestigetier prestige_tier "nullable"
         text personal_note "nullable"
         timestamp created_at
@@ -49,57 +45,44 @@ erDiagram
     tags ||--o{ viewing_history_tags : labels
 ```
 
-## Tables
+## Table Responsibilities
 
 ### `users`
 
-Stores registration and authentication data plus optional age and reserved admin status. Email uniqueness is enforced by the database. Passwords are stored as bcrypt hashes, not plain text.
+Stores registration and authentication data, optional age, and reserved admin status. Email is unique. Only bcrypt password hashes are stored.
 
 ### `viewing_history_entries`
 
-Each entry belongs to a user and stores:
+Stores the minimum film reference (`tmdb_id`) plus user-owned reaction data. The table deliberately has no `title`, `poster_url`, synopsis, genre, cast, director, runtime, provider, or foreign key to a local film entity.
 
-- `tmdb_id`, which identifies the film in TMDB
-- cached `title` and `poster_url` values captured when the film is logged
-- an optional `prestige_tier`
-- an optional `personal_note`
-- creation and update timestamps
-
-Complete details such as synopsis, genres, credits, runtime, and current watch-provider data remain sourced from TMDB. The cached title and poster URL are deliberately local so a history list does not require one TMDB request per entry.
+`GET /films/history` retrieves title and poster data from TMDB concurrently. Display metadata can therefore change with TMDB and may be null for an individual item when enrichment fails; the database row remains intact.
 
 ### `tags`
 
-Stores the application-managed tag catalogue. Tags use integer primary keys and are seeded by `backend/seeds/seed_tag.py`.
+Stores application-managed reaction tags seeded by `backend/seeds/seed_tag.py`.
 
 ### `viewing_history_tags`
 
-Associates viewing-history entries with zero or more tags. Its two foreign-key columns form a composite primary key, preventing the same tag from being linked to the same entry twice.
+Implements the many-to-many entry/tag relationship. Its composite primary key prevents the same tag association from being inserted twice for one entry.
+
+## Migration State
+
+The Alembic chain preserves the historical migration that added nullable title/poster cache columns. Revision `b3d91f6a2c04` follows it and drops those columns in `upgrade()`. Its `downgrade()` restores both as nullable text columns. Earlier migrations were not rewritten.
 
 ## Relationship Summary
 
 | Relationship | Type | Storage |
 |---|---|---|
-| User to viewing-history entry | One-to-many | `viewing_history_entries.user_id` references `users.id` |
-| Viewing-history entry to tag | Many-to-many | `viewing_history_tags` joins `viewing_history_entries` and `tags` |
+| User to viewing-history entry | One-to-many | `viewing_history_entries.user_id` → `users.id` |
+| Viewing-history entry to tag | Many-to-many | `viewing_history_tags` join table |
 
 ## Prestige Tier Values
 
-The PostgreSQL `prestigetier` enum and Python `PrestigeTier` enum contain these stored values:
-
-| Stored value | Intended meaning in source comments |
-|---|---|
-| `Platinum` | Exceptional; an all-time favourite |
-| `Gold` | Great and memorable |
-| `Silver` | Good and worth watching |
-| `Bronze` | Decent; had its moments |
-| `Coal` | Poor and mostly disappointing |
-| `Trash` | Bad; regretted watching it |
+`Platinum`, `Gold`, `Silver`, `Bronze`, `Coal`, and `Trash` are stored through the PostgreSQL `prestigetier` enum.
 
 ## Scope Boundaries
 
-The current schema has no local `films` table. It also has no `watchlist_entries`, `platforms`, or `user_platforms` table. Those concepts are planned and must not be treated as current database entities.
-
-The current source also has no operation that moves a watchlist entry into viewing history, because the watchlist model and related layers have not been implemented.
+The current schema has no local `films`, `watchlist_entries`, `platforms`, `user_platforms`, recommendation, social, or payment tables. Mistral output is transient and is never persisted. Watchlists and platform preferences remain future roadmap ideas, not current database entities.
 
 ## Author
 

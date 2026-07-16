@@ -63,16 +63,16 @@ async def search_films(query: str = Query(..., min_length=1)):
 
 
 @router.get("/history", response_model=list[ViewingHistoryEntryResponse])
-def get_history(
+async def get_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Retrieve the authenticated user's full viewing history.
 
-    Each entry contains the tmdb_id of the logged film, cached title and
-    poster URL, tags, prestige tier, and personal note. Caching the title
-    and poster URL avoids a separate TMDB request for every history item.
+    Each entry contains the persisted tmdb_id and user reaction. Current title
+    and poster metadata is resolved concurrently from TMDB for this response;
+    an unavailable film keeps its history entry with null display metadata.
 
     Returns:
         list[ViewingHistoryEntryResponse]: All entries in the user's
@@ -81,7 +81,7 @@ def get_history(
     Raises:
         HTTPException 401: If the request is not authenticated.
     """
-    return viewing_history_service.get_history(db, current_user)
+    return await viewing_history_service.get_history(db, current_user)
 
 
 @router.get("/{tmdb_id}", response_model=FilmWithStatus, status_code=status.HTTP_200_OK)
@@ -133,8 +133,8 @@ async def log_film(
     """
     Log a film in the authenticated user's viewing history.
 
-    Fetches title and poster from TMDB at log time so the history list
-    can be displayed without additional API calls.
+    Validates the TMDB identifier, then stores only the identifier and the
+    user's reaction. Film metadata returned here is not persisted.
 
     Args:
         payload (ViewingHistoryEntryCreate): tmdb_id, optional tag_ids,

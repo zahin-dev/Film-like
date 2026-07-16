@@ -1,285 +1,246 @@
 # Film-like
 
-Film-like is a personal film-diary application under active development. The current repository contains backend source for authentication, TMDB film lookup, tags, and viewing-history management. An AI-assisted recommendation experience is part of the product plan, but it is not implemented in the current source tree.
+Film-like is a working end-to-end film-diary MVP. A user can register, sign in, search TMDB, inspect a film, record tags/tier/notes, revisit enriched viewing history, and request mood-based recommendations from Mistral AI. AI candidates are validated, filtered, and resolved through TMDB before they reach the UI.
 
-## Table of Contents
+This repository demonstrates an MVP architecture; it is not a production-ready service. Live film features depend on TMDB, and live recommendations additionally require a Mistral API key.
 
-- [Current Status](#current-status)
-- [Implemented Features](#implemented-features)
-- [Planned or Incomplete Features](#planned-or-incomplete-features)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Database](#database)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [API Overview](#api-overview)
-- [Testing](#testing)
-- [Documentation](#documentation)
-- [Roadmap](#roadmap)
-- [Author](#author)
+## Core MVP Flow
 
-## Current Status
-
-The backend source implements the main authentication and viewing-history workflows. The frontend implements a login and registration page, authentication state, JWT storage, and API interceptors. The dashboard, catalog, film-detail, recommendation, and profile routes currently render placeholder components.
-
-This is not a complete end-to-end MVP or a production-ready application.
-
-> **Repository completeness note:** the backend modules import an `app.schemas` package, but that package is not present in the current Git tree. The source modules and automated tests describe the implemented backend behavior listed below, but the backend cannot be imported or its tests executed successfully until the missing schema modules are restored.
+```text
+authentication
+  -> TMDB search
+  -> protected film details
+  -> viewing-history log or removal
+  -> TMDB-enriched diary display
+  -> mood + history-tag recommendation context
+  -> Mistral structured candidates
+  -> TMDB verification
+  -> recommendation deck
+```
 
 ## Implemented Features
 
-| Area | Backend status | Frontend status |
+| Area | Backend | Frontend |
 |---|---|---|
-| User registration | Implemented at `POST /auth/register` | Registration mode is implemented on the authentication page |
-| User login | Implemented at `POST /auth/login` | Login form, session token storage, and logout state are implemented |
-| JWT authentication | Token creation and protected-route validation are implemented | Axios adds the stored Bearer token to requests |
-| TMDB film search | Implemented at `GET /films/search` | Catalog page is a placeholder |
-| TMDB film details | Implemented at `GET /films/{tmdb_id}` | Film-detail page is a placeholder |
-| Viewing history | Create, retrieve, and delete endpoints are implemented | Dashboard/history UI is a placeholder |
-| Tags | Seed data, storage, association, and public `GET /tags` endpoint are implemented | Tag-selection UI is not implemented |
-| Prestige tier | Optional `PrestigeTier` storage is implemented | Editing UI is not implemented |
-| Personal notes | Optional text storage is implemented | Editing UI is not implemented |
-| PostgreSQL | SQLAlchemy configuration and Alembic migrations are present | Not applicable |
-| Docker database | A PostgreSQL 16 service is configured in `docker-compose.yml` | Not applicable |
-| Backend tests | Pytest suites exist for authentication, TMDB-backed film operations, tags, history, and JWT edge cases | Not applicable |
+| Authentication | Registration, login, bcrypt hashes, HS256 JWT validation | Accessible registration/login forms, session state, protected routes, logout |
+| Film catalog | TMDB search, details, credits, runtime, genres, posters, and French watch-provider names | Search states, result cards, protected detail view |
+| Viewing history | Create, list, and delete user-owned records | Diary cards, tags, prestige tier, notes, dates, retry/empty/error states |
+| Reactions | Seeded tags, optional `PrestigeTier`, optional personal note | Tag picker, tier selector, note input, log/remove state updates |
+| Recommendations | Authenticated `POST /recommendations`, Mistral JSON Schema output, Recommendation Facade, TMDB verification | Eight documented mood choices, reasons, next/skip interaction, retry/exhausted states |
+| Profile | Public user fields returned by authentication | Read-only profile and logout; no invented edit API |
+| Automation | Mock-only backend tests and GitHub Actions | CI runs `npm ci`, lint, and production build |
 
-The film-detail backend also requests TMDB watch-provider data and returns subscription provider names for the configured country. This is different from storing a user's subscriptions or filtering recommendations by them; those capabilities are not implemented.
+The Pydantic v2 schema package is present under `backend/app/schemas`, application imports succeed with valid environment settings, and tests use isolated configuration rather than a developer's private `.env`.
 
-## Planned or Incomplete Features
+## Recommendation Design
 
-The following items do not have working source implementations in the current repository:
+The service-layer Recommendation Facade isolates routes and frontend code from external AI communication. For each request it:
 
-- Mistral AI integration and AI-generated recommendations
-- A Recommendation Facade or `/recommendations` API routes
-- Mood questionnaire and swipe interface
-- Watchlist model, repository, service, API, and UI
-- User profile API and working profile UI
-- Stored streaming-platform preferences
-- Recommendation filtering by a user's subscribed platforms
-- Working dashboard, catalog, film-detail, recommendation, and profile pages
-- A complete end-to-end MVP
+1. reads the authenticated user's viewing history;
+2. counts history tags and resolves recent viewed titles where possible;
+3. combines that context with the selected mood;
+4. requests strict JSON Schema output from Mistral's chat-completions API;
+5. parses candidates through strict Pydantic models;
+6. rejects malformed, empty, duplicate, and unreasonable candidates;
+7. searches TMDB by candidate title and prefers a supplied year match;
+8. excludes watched and duplicate TMDB IDs; and
+9. returns only verified `Film` objects with concise reasons.
+
+Structured-output or resolution shortfalls receive at most one retry. Missing configuration, timeouts, connection failures, rejected credentials, rate limits, malformed output, and insufficient verified results are mapped to controlled API errors without exposing keys, authorization headers, or internal prompts.
+
+Supported moods are `relaxed`, `uplifting`, `excited`, `thoughtful`, `emotional`, `romantic`, `adventurous`, and `scared`.
+
+## Data Ownership
+
+TMDB is the source of truth for film metadata. Film-like does not have a local `films` table and persists only `tmdb_id` for film identity. A viewing-history record stores:
+
+- user and TMDB identifiers;
+- optional prestige tier and personal note;
+- tag associations; and
+- timestamps.
+
+Titles and poster URLs are retrieved from TMDB when history is returned. Enrichment requests run concurrently, preserve deterministic database ordering, and retain an entry with null display metadata if an individual TMDB lookup fails.
+
+No synopsis, genre, cast, director, runtime, poster, title, or streaming-provider metadata is persisted locally.
 
 ## Tech Stack
 
-| Layer | Technology | Current role |
-|---|---|---|
-| Frontend | React 19, React Router, Tailwind CSS, Axios | Authentication page, routing, auth context, and placeholder routes |
-| Backend | Python 3.11+, FastAPI | Auth, film, tag, and viewing-history route source |
-| Persistence | PostgreSQL 16, SQLAlchemy, Alembic | Users, tags, viewing-history entries, and tag associations |
-| Authentication | JWT with HS256, bcrypt | Stateless access tokens and password hashing |
-| Film data | TMDB API | Search, details, posters, credits, and watch-provider data |
-| Testing | pytest, pytest-cov | Backend API and service behavior tests |
-| Planned AI | Mistral AI | Not integrated in the current implementation |
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, React Router 7, Axios, Tailwind CSS 4, Vite 8 |
+| Backend | Python 3.12, FastAPI, Pydantic v2, httpx |
+| Persistence | PostgreSQL 16, SQLAlchemy 2, Alembic |
+| Authentication | JWT (HS256), bcrypt |
+| Film metadata | TMDB API |
+| AI recommendations | Mistral chat-completions API with strict JSON Schema output |
+| Verification | pytest, pytest-cov, ESLint, Vite build, GitHub Actions |
 
 ## Architecture
 
-The current implementation follows this architecture:
-
 ```text
-React frontend
-    -> FastAPI auth, film, and tag routes
-    -> authentication, film, and viewing-history services
-    -> user and viewing-history repositories
-    -> PostgreSQL
-
-FastAPI film services
-    -> TMDB API
+React pages + AuthContext + centralized Axios client
+    -> FastAPI auth / film / tag / recommendation routes
+    -> authentication / film / viewing-history services
+    -> Recommendation Facade
+    -> repositories -> PostgreSQL
+    -> TMDB client -> TMDB API
+    -> Mistral client -> official Mistral API
 ```
 
-Mistral AI, a Recommendation Facade, watchlist components, profile APIs, and platform-preference storage belong to the planned architecture and are not part of the current implementation.
-
-See [System Architecture](docs/diagrams/Architecture.md) for separate current and planned diagrams.
-
-## Database
-
-Film-like uses PostgreSQL as its relational database. TMDB is used as the source of truth for complete film metadata. The application stores the TMDB identifier and caches the film title and poster URL in viewing-history entries so that history lists can be displayed without an additional TMDB request for every item.
-
-A viewing-history entry can also store tags, an optional prestige tier, and an optional personal note. The current schema does not contain watchlist, platform, or user-platform-preference tables.
-
-See the [Entity Relationship Diagram](docs/diagrams/ERDiagram.md).
+Routes handle HTTP concerns, services coordinate business behavior, repositories isolate database access, and external clients isolate outbound HTTP. See [System Architecture](docs/diagrams/Architecture.md), [Class Diagram](docs/diagrams/ClassDiagram.md), [ER Diagram](docs/diagrams/ERDiagram.md), and [Sequence Diagrams](docs/diagrams/SequenceDiagrams.md).
 
 ## Project Structure
 
 ```text
 Portfolio/
-├── README.md
-├── docker-compose.yml
-├── setup.sh
-├── start.sh
-├── clean.sh
-├── docs/
-│   └── diagrams/
-│       ├── Architecture.md
-│       ├── ClassDiagram.md
-│       ├── ERDiagram.md
-│       └── SequenceDiagrams.md
+├── .github/workflows/ci.yml
 ├── backend/
-│   ├── alembic/
+│   ├── alembic/versions/
 │   ├── app/
-│   │   ├── external/
+│   │   ├── external/       # TMDB and Mistral HTTP clients
 │   │   ├── models/
 │   │   ├── repositories/
 │   │   ├── routes/
-│   │   ├── services/
-│   │   ├── database.py
-│   │   ├── dependencies.py
-│   │   └── main.py
+│   │   ├── schemas/        # Pydantic request/response contracts
+│   │   └── services/       # Includes Recommendation Facade
 │   ├── seeds/
-│   ├── tests/
-│   └── requirements.txt
-└── frontend/
-    ├── public/
-    └── src/
-        ├── context/
-        ├── pages/
-        ├── services/
-        ├── App.jsx
-        └── main.jsx
+│   └── tests/
+├── frontend/
+│   └── src/
+│       ├── components/
+│       ├── context/
+│       ├── pages/
+│       ├── services/
+│       └── utils/
+└── docs/diagrams/
 ```
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.11 or newer
-- Node.js 18 or newer
+- Python 3.12 (the pinned backend dependencies are verified on 3.12)
+- Node.js 20 or newer
 - Docker Engine with Docker Compose v2
-- A TMDB Read Access Token
+- TMDB Read Access Token
+- Mistral API key for live recommendations only
 
-The current implementation does not require a Mistral AI key because no Mistral integration exists yet.
+### Setup
 
-### One-time setup
-
-On a supported Bash environment, run:
+On a supported Bash environment:
 
 ```bash
 ./setup.sh
 ```
 
-The script creates the backend virtual environment, installs backend and frontend dependencies, creates local environment files, starts PostgreSQL, applies migrations, and seeds tags.
+The setup script creates local environment files, installs dependencies, starts PostgreSQL, applies migrations, and seeds tags. Copy values into `backend/.env` from `backend/.env.example`:
 
-Set `TMDB_READ_ACCESS_TOKEN` in `backend/.env` before using TMDB-backed endpoints.
+```dotenv
+DATABASE_URL=postgresql://cinemood:cinemood@localhost:5432/cinemood
+SECRET_KEY=replace_with_a_long_random_secret
+TMDB_READ_ACCESS_TOKEN=replace_with_your_tmdb_token
+MISTRAL_API_KEY=replace_with_your_mistral_key
+MISTRAL_MODEL=mistral-small-latest
+MISTRAL_API_BASE_URL=https://api.mistral.ai/v1
+```
 
-> The missing `backend/app/schemas` package noted under [Current Status](#current-status) currently prevents the backend application from starting after setup.
+`MISTRAL_API_KEY` is optional for application startup. Without it, all non-recommendation features remain available and `POST /recommendations` returns a clear `503` rather than fabricated recommendations.
 
-### Development session
+Start a development session:
 
 ```bash
 source backend/venv/bin/activate
 ./start.sh
 ```
 
-When the application can start, the configured development URLs are:
-
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8000`
 - Swagger UI: `http://localhost:8000/docs`
 
-### Cleaning generated files
-
-```bash
-./clean.sh
-```
-
-Hard mode additionally removes reinstallable local dependencies and environment files:
-
-```bash
-./clean.sh --hard
-```
-
-Do not run hard mode while the Python virtual environment is active.
-
 ## API Overview
-
-### Implemented API
-
-These are the routes currently registered in `backend/app/main.py` and its included routers.
 
 | Method | Endpoint | Description | Authentication |
 |---|---|---|---|
 | GET | `/` | API health message | Public |
-| POST | `/auth/register` | Create a user and return `{ user, token }` | Public |
-| POST | `/auth/login` | Validate credentials and return `{ user, token }` | Public |
-| GET | `/tags` | List seeded reference tags | Public |
-| GET | `/films/search?query={title}` | Search TMDB and return a JSON array of films | Public |
-| GET | `/films/history` | Return the authenticated user's viewing-history entries | Bearer token |
-| GET | `/films/{tmdb_id}` | Return TMDB film details plus the user's `in_history` status | Bearer token |
-| POST | `/films/log` | Create a viewing-history entry and cache its title and poster URL | Bearer token |
-| DELETE | `/films/log/{tmdb_id}` | Delete the user's history entry for the specified TMDB film | Bearer token |
+| POST | `/auth/register` | Create an account and return public user data plus JWT | Public |
+| POST | `/auth/login` | Validate credentials and return public user data plus JWT | Public |
+| GET | `/tags` | List seeded reaction tags | Public |
+| GET | `/films/search?query={title}` | Search TMDB | Public |
+| GET | `/films/history` | Return user records enriched with current TMDB title/poster | Bearer token |
+| GET | `/films/{tmdb_id}` | Return complete TMDB details plus `in_history` | Bearer token |
+| POST | `/films/log` | Validate TMDB ID and persist only ID plus user reaction | Bearer token |
+| DELETE | `/films/log/{tmdb_id}` | Remove the user's matching history record | Bearer token |
+| POST | `/recommendations` | Generate and verify mood-based recommendations | Bearer token |
 
-### Planned API
+### Recommendation Contract
 
-No routes for the following areas are registered in the current FastAPI application. Names shown here describe planned resource areas, not a current API contract.
+Request:
 
-- Watchlist operations
-- User profile operations
-- Streaming-platform preference operations
-- Recommendation operations, including a possible `/recommendations/start` endpoint
+```json
+{
+  "mood": "thoughtful",
+  "limit": 5
+}
+```
 
-## Testing
+Successful response:
 
-Backend test files are present under `backend/tests` and use an in-memory SQLite database with mocked TMDB calls.
+```json
+{
+  "mood": "thoughtful",
+  "history_tags_used": ["Masterpiece", "Emotional Damage"],
+  "recommendations": [
+    {
+      "film": {
+        "tmdb_id": 329865,
+        "title": "Arrival",
+        "year": 2016,
+        "genres": null,
+        "poster_url": "https://image.tmdb.org/t/p/w500/example.jpg",
+        "synopsis": "TMDB synopsis",
+        "director": null,
+        "cast": null,
+        "runtime": null,
+        "streaming_platforms": null
+      },
+      "reason": "A reflective science-fiction story with an emotional core."
+    }
+  ]
+}
+```
+
+## Verification
+
+Backend tests use an in-memory SQLite database and mock all TMDB and Mistral calls:
 
 ```bash
 cd backend
-pytest
+python -m pytest -q
+python -m pytest --cov=app
 ```
 
-Optional coverage output:
-
-```bash
-pytest --cov=app --cov-report=html
-```
-
-The presence of tests does not imply that they pass in every checkout. See the repository completeness note above and the latest validation results reported with the documentation change.
-
-Frontend checks are configured as:
+Frontend verification uses the committed lockfile:
 
 ```bash
 cd frontend
+npm ci
 npm run lint
 npm run build
 ```
 
-## Documentation
+The GitHub Actions workflow runs backend pytest and frontend lint/build with dummy configuration values. Passing mock-based tests demonstrates local contracts and error handling; it does not prove that TMDB or Mistral is currently available, that a supplied key is valid, or that every model response will yield enough verifiable films.
 
-- [System Architecture](docs/diagrams/Architecture.md) distinguishes current implementation from target architecture.
-- [Class Diagram](docs/diagrams/ClassDiagram.md) documents current model classes and identifies planned concepts separately.
-- [Entity Relationship Diagram](docs/diagrams/ERDiagram.md) shows only the tables created by current migrations.
-- [Sequence Diagrams](docs/diagrams/SequenceDiagrams.md) separates implemented API flows from planned recommendation flows.
+## MVP Boundaries and Roadmap
 
-## Roadmap
+Current limitations are explicit:
 
-### Implemented in backend source
+- This is an MVP, not a production-ready deployment.
+- Profile information is read-only in the UI because no profile-update API exists.
+- Watchlists, social features, shared lists, platform-preference storage, payments, and subscription filtering are not implemented.
+- TMDB watch-provider names are informational and are not user subscriptions.
+- External service availability and generated recommendation quality vary outside the mocked test suite.
 
-- [x] User registration and login logic
-- [x] JWT creation and protected-route validation
-- [x] TMDB search and film-detail logic
-- [x] Viewing-history creation, retrieval, and deletion
-- [x] Tag association, prestige tier, and personal-note persistence
-- [x] PostgreSQL configuration, migrations, and Docker service
-- [x] Backend automated test suites
-
-### Incomplete or planned
-
-- [ ] Restore the missing backend schema modules required by current imports
-- [ ] Connect film, tag, and viewing-history APIs to working frontend pages
-- [ ] Implement the dashboard, catalog, film-detail, and profile experiences
-- [ ] Implement a watchlist
-- [ ] Implement user profile and streaming-platform preference APIs
-- [ ] Implement the mood questionnaire and swipe interface
-- [ ] Integrate Mistral AI and recommendation endpoints
-- [ ] Filter recommendations by stored platform subscriptions
-- [ ] Complete and validate the end-to-end MVP
-
-### Possible future versions
-
-- Guest mode
-- Additional languages
-- Social features and shared lists
-- Cinema listings and nearby showtimes
-- Native mobile application
-- Viewing-history export
+Possible future work includes watchlists, profile editing, stored platform preferences, shared lists, additional languages, cinema listings, mobile clients, and viewing-history export.
 
 ## Author
 
@@ -290,5 +251,4 @@ npm run build
 - Department: Department of Information Systems
 - Year: 3rd Year Undergraduate Student
 - E-mail: islam.zahin.0116@gmail.com
-
 - GitHub: [@zahin-dev](https://github.com/zahin-dev)

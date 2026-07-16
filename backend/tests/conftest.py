@@ -10,6 +10,14 @@ Fixtures:
     - client: a FastAPI TestClient with get_db overridden to use db_session
 """
 
+import os
+
+# Configure deterministic test-only settings before importing the application.
+# Production continues to require its own environment configuration.
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ.setdefault("SECRET_KEY", "film-like-test-secret-key")
+os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-tmdb-access-token")
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

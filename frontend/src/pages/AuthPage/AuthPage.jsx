@@ -1,167 +1,137 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../../context/AuthContext'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/authStore'
 import api from '../../services/api'
+import { getApiError } from '../../utils/apiError'
 
-/**
- * Parse an Axios error into a human-readable string.
- *
- * FastAPI returns two different error shapes depending on the source:
- *
- *   - Business logic errors (401, 409, 500...):
- *       { "detail": "Email already registered" }        ← string
- *
- *   - Pydantic validation errors (422):
- *       { "detail": [{ "msg": "Value error, ...", "loc": [...] }] }  ← array
- *
- *   - No response at all: network error or backend not running.
- *
- * @param {Error} err - The Axios error caught in the try/catch block.
- * @returns {string} A displayable error message.
- */
-function parseApiError(err) {
-  if (!err.response) {
-    return 'Unable to reach the server. Make sure the backend is running.'
-  }
-
-  const detail = err.response.data?.detail
-
-  // Business logic error — detail is already a plain string
-  if (typeof detail === 'string') {
-    return detail
-  }
-
-  // Pydantic validation error — detail is an array of error objects.
-  // Each object has a "msg" field like "Value error, Invalid Email format".
-  // We strip the "Value error, " prefix added by Pydantic v2.
-  if (Array.isArray(detail)) {
-    return detail
-      .map(e => e.msg.replace('Value error, ', ''))
-      .join(' — ')
-  }
-
-  return 'An error has occurred.'
-}
-
-/**
- * AuthPage — Login and registration page.
- *
- * A single page handles both modes. The user switches between them
- * with the button at the bottom. `mode` controls which fields are
- * shown and which API call is made on submit.
- *
- * Flow:
- *   - Login: POST /auth/login via AuthContext.login() → redirect to /dashboard
- *   - Register: POST /auth/register → then auto-login → redirect to /dashboard
- */
 function AuthPage() {
-  // 'login' or 'register' — controls the form layout and submit behaviour
   const [mode, setMode] = useState('login')
-
-  // Controlled inputs — one state per field
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [age, setAge] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-
-  // Holds the error message to display below the form, if any
+  const [form, setForm] = useState({
+    firstName: '',
+    lastName: '',
+    age: '',
+    email: '',
+    password: '',
+  })
   const [error, setError] = useState('')
-
+  const [submitting, setSubmitting] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
 
-  /**
-   * Handle form submission for both login and registration.
-   * Prevents the default browser form submission, calls the
-   * appropriate API endpoint, then redirects to the dashboard.
-   */
-  async function handleSubmit(e) {
-    e.preventDefault()
-    setError('')
+  function updateField(event) {
+    setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
+  }
 
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setError('')
+    setSubmitting(true)
     try {
       if (mode === 'register') {
-        // Register the new account first.
-        // Age is optional — parse to integer if provided, null otherwise.
         await api.post('/auth/register', {
-          first_name: firstName,
-          last_name: lastName,
-          email: email,
-          password: password,
-          age: age ? parseInt(age, 10) : null
+          first_name: form.firstName.trim(),
+          last_name: form.lastName.trim(),
+          email: form.email.trim(),
+          password: form.password,
+          age: form.age ? Number.parseInt(form.age, 10) : null,
         })
-        // Auto-login immediately after successful registration
-        await login(email, password)
-      } else {
-        // Login directly with existing credentials
-        await login(email, password)
       }
-
-      navigate('/dashboard')
-    } catch (err) {
-      // Display the detail message from the API, or a generic fallback
-      setError(parseApiError(err))
+      await login(form.email.trim(), form.password)
+      const destination = location.state?.from?.pathname || '/dashboard'
+      navigate(destination, { replace: true })
+    } catch (requestError) {
+      setError(getApiError(requestError, 'Authentication failed.'))
+    } finally {
+      setSubmitting(false)
     }
   }
 
+  function toggleMode() {
+    setMode((current) => current === 'login' ? 'register' : 'login')
+    setError('')
+  }
+
+  const isLogin = mode === 'login'
+
   return (
-    <div>
-      <h1>{mode === 'login' ? 'Login' : 'Register'}</h1>
+    <main className="auth-page">
+      <section className="auth-story" aria-labelledby="brand-heading">
+        <div className="auth-brand">
+          <span className="brand-mark large" aria-hidden="true">F</span>
+          <span>Film-like</span>
+        </div>
+        <p className="eyebrow light">Your taste, in motion</p>
+        <h1 id="brand-heading">A film diary that understands the mood you are in.</h1>
+        <p>
+          Search the TMDB catalog, keep a personal viewing history, and turn
+          your reactions into verified recommendations powered by Mistral AI.
+        </p>
+        <div className="auth-proof" aria-label="Product features">
+          <span>Personal diary</span>
+          <span>Mood-led discovery</span>
+          <span>TMDB verified</span>
+        </div>
+      </section>
 
-      <form onSubmit={handleSubmit}>
+      <section className="auth-form-panel" aria-labelledby="auth-heading">
+        <div className="auth-form-wrap">
+          <p className="eyebrow">{isLogin ? 'Welcome back' : 'Start your diary'}</p>
+          <h2 id="auth-heading">{isLogin ? 'Sign in to Film-like' : 'Create your account'}</h2>
+          <p className="muted">
+            {isLogin
+              ? 'Continue where your last film left off.'
+              : 'A few details, then your next great film.'}
+          </p>
 
-        {/* Registration-only fields — hidden in login mode */}
-        {mode === 'register' && (
-          <>
-            <input
-              placeholder="First Name"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-            />
-            <input
-              placeholder="Last Name"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-            />
-            <input
-              type="number"
-              placeholder="Age (optional)"
-              value={age}
-              onChange={(e) => setAge(e.target.value)}
-            />
-          </>
-        )}
+          <form className="form-stack" onSubmit={handleSubmit}>
+            {!isLogin && (
+              <div className="form-grid two-column">
+                <label>
+                  First name
+                  <input name="firstName" value={form.firstName} onChange={updateField} autoComplete="given-name" required />
+                </label>
+                <label>
+                  Last name
+                  <input name="lastName" value={form.lastName} onChange={updateField} autoComplete="family-name" required />
+                </label>
+              </div>
+            )}
 
-        {/* Common fields — always visible */}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+            {!isLogin && (
+              <label>
+                Age <span className="optional">Optional</span>
+                <input name="age" type="number" min="1" max="120" value={form.age} onChange={updateField} inputMode="numeric" />
+              </label>
+            )}
 
-        <button type="submit">
-          {mode === 'login' ? 'Sign in' : 'Create Account'}
-        </button>
-      </form>
+            <label>
+              Email address
+              <input name="email" type="email" value={form.email} onChange={updateField} autoComplete="email" required />
+            </label>
 
-      {/* Error message — only rendered when non-empty */}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+            <label>
+              Password
+              <input name="password" type="password" minLength="8" maxLength="64" value={form.password} onChange={updateField} autoComplete={isLogin ? 'current-password' : 'new-password'} required />
+              {!isLogin && <span className="field-hint">8–64 characters with a number and symbol.</span>}
+            </label>
 
-      {/* Toggle between login and register modes */}
-      <button onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
-        {mode === 'login'
-          ? "Don't have an account? Register first."
-          : 'Already have an account?'}
-      </button>
-    </div>
+            {error && <p className="inline-alert" role="alert">{error}</p>}
+
+            <button className="button primary full" type="submit" disabled={submitting}>
+              {submitting ? 'Please wait…' : isLogin ? 'Sign in' : 'Create account'}
+            </button>
+          </form>
+
+          <p className="auth-switch">
+            {isLogin ? 'New to Film-like?' : 'Already have an account?'}{' '}
+            <button type="button" className="text-button" onClick={toggleMode}>
+              {isLogin ? 'Create one' : 'Sign in'}
+            </button>
+          </p>
+        </div>
+      </section>
+    </main>
   )
 }
 
