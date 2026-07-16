@@ -46,7 +46,17 @@ cd frontend
 npm ci
 ```
 
-Result: `180` packages added and `181` packages audited from the committed lockfile. npm reported `2 high severity vulnerabilities`; no automatic dependency rewrite was applied as part of this evidence task.
+Result after the advisory remediation: `180` packages added and `181` packages audited from the committed lockfile; npm reported `0 vulnerabilities`.
+
+### Frontend dependency audits
+
+```powershell
+cd frontend
+npm audit
+npm audit --omit=dev
+```
+
+Result: both the complete dependency audit and the production-only audit reported `0 vulnerabilities`. The lockfile refresh moved the production transitive dependency `form-data` from 4.0.5 to 4.0.6 and the development dependency Vite from 8.0.14 to 8.1.5 within the existing declared semver ranges. No dependency override, forced update, major-version change, or new direct package was added.
 
 ### Frontend lint
 
@@ -64,7 +74,7 @@ cd frontend
 npm run build
 ```
 
-Result: Vite 8.0.14 transformed `91` modules and completed successfully in `337ms`. Output sizes were `0.45 kB` HTML (`0.29 kB` gzip), `26.24 kB` CSS (`6.55 kB` gzip), and `303.78 kB` JavaScript (`97.34 kB` gzip). The generated `frontend/dist` directory remains ignored and untracked.
+Result: Vite 8.1.5 transformed `91` modules and completed successfully in `366ms`. Output sizes were `0.45 kB` HTML (`0.29 kB` gzip), `26.24 kB` CSS (`6.55 kB` gzip), and `303.82 kB` JavaScript (`97.33 kB` gzip). The generated `frontend/dist` directory remains ignored and untracked.
 
 ### Docker Compose validation
 
@@ -134,6 +144,5 @@ This record does not include or commit keys, tokens, screenshots, response bodie
 - Film-like remains an MVP and is not production-ready.
 - Malformed Mistral output remains possible; strict schema requests, Pydantic validation, filtering, at most one retry, and controlled errors prevent malformed candidates from being displayed as recommendations.
 - Automated tests mock external services and therefore do not prove live availability.
-- npm reported two high-severity dependency audit findings during the clean install; dependency remediation was not included in this scoped task.
 - Diary insights aggregate user-selected reaction tags. They are not clinical emotion analysis, sentiment inference, personality analysis, or mental-health analysis.
 - The retrospective development-history statements are classified separately in [DevelopmentProcess.md](DevelopmentProcess.md).
