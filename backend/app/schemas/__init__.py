@@ -1,6 +1,7 @@
 """Pydantic request and response schemas for the Film-like API."""
 
 from app.schemas.film import Film, FilmWithStatus
+from app.schemas.insight import DiaryInsightsResponse, ReactionSignalSummary
 from app.schemas.recommendation import (
     Mood,
     Recommendation,
@@ -18,10 +19,12 @@ __all__ = [
     "AuthResponse",
     "Film",
     "FilmWithStatus",
+    "DiaryInsightsResponse",
     "Mood",
     "Recommendation",
     "RecommendationRequest",
     "RecommendationResponse",
+    "ReactionSignalSummary",
     "TagResponse",
     "UserCreate",
     "UserLogin",

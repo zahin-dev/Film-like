@@ -17,6 +17,9 @@ function DashboardPage() {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [insights, setInsights] = useState(null)
+  const [insightsLoading, setInsightsLoading] = useState(true)
+  const [insightsError, setInsightsError] = useState('')
 
   const loadHistory = useCallback(async () => {
     try {
@@ -29,15 +32,37 @@ function DashboardPage() {
     }
   }, [])
 
+  const loadInsights = useCallback(async () => {
+    try {
+      const response = await api.get('/insights')
+      setInsights(response.data)
+    } catch (requestError) {
+      setInsightsError(getApiError(requestError, 'Your diary insights could not be loaded.'))
+    } finally {
+      setInsightsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     const task = window.setTimeout(loadHistory, 0)
     return () => window.clearTimeout(task)
   }, [loadHistory])
 
+  useEffect(() => {
+    const task = window.setTimeout(loadInsights, 0)
+    return () => window.clearTimeout(task)
+  }, [loadInsights])
+
   function retryHistory() {
     setLoading(true)
     setError('')
     loadHistory()
+  }
+
+  function retryInsights() {
+    setInsightsLoading(true)
+    setInsightsError('')
+    loadInsights()
   }
 
   const ratedCount = entries.filter((entry) => entry.prestige_tier).length
@@ -58,9 +83,88 @@ function DashboardPage() {
         <section className="stat-row" aria-label="Viewing history summary">
           <div><strong>{entries.length}</strong><span>Films logged</span></div>
           <div><strong>{ratedCount}</strong><span>Tier rated</span></div>
-          <div><strong>{tagCount}</strong><span>Moods captured</span></div>
+          <div><strong>{tagCount}</strong><span>Reaction signals</span></div>
         </section>
       )}
+
+      <section className="insights-section" aria-labelledby="insights-heading">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Diary signals</p>
+            <h2 id="insights-heading">Diary Insights</h2>
+            <p className="section-description">
+              These explainable signals are calculated only from reaction tags you selected for logged films.
+            </p>
+          </div>
+          {!insightsLoading && insights && (
+            <button className="button ghost compact" type="button" onClick={retryInsights}>Refresh insights</button>
+          )}
+        </div>
+
+        {insightsLoading && <LoadingState message="Calculating your selected reaction signals…" />}
+        {!insightsLoading && insightsError && <ErrorState message={insightsError} onRetry={retryInsights} />}
+        {!insightsLoading && !insightsError && insights?.total_films === 0 && (
+          <EmptyState
+            title="No diary signals yet"
+            message="Log a film and select reaction tags to begin building explainable diary insights."
+            action={<Link className="button primary" to="/catalog">Explore the catalog</Link>}
+          />
+        )}
+        {!insightsLoading && !insightsError && insights?.total_films > 0 && insights.tagged_films === 0 && (
+          <EmptyState
+            title="Add selected reaction tags"
+            message="Your diary has films, but no selected reaction tags to calculate yet."
+            action={<Link className="button primary" to="/catalog">Find a film to tag</Link>}
+          />
+        )}
+
+        {!insightsLoading && !insightsError && insights?.tagged_films > 0 && (
+          <div className="insights-content">
+            <dl className="insights-summary" aria-label="Diary insight totals">
+              <div><dt>Films logged</dt><dd>{insights.total_films}</dd></div>
+              <div><dt>Films with selected tags</dt><dd>{insights.tagged_films}</dd></div>
+              <div><dt>Unique reaction signals</dt><dd>{insights.unique_reaction_signals}</dd></div>
+            </dl>
+
+            <div className="insights-grid">
+              <article className="insights-panel">
+                <h3>Top reaction signals</h3>
+                <p className="insights-note">Share of tagged films containing each selected tag.</p>
+                <ol className="signal-list">
+                  {insights.top_reaction_signals.map((signal) => (
+                    <li key={signal.tag}>
+                      <div className="signal-label">
+                        <span>{signal.tag}</span>
+                        <strong>{signal.count} {signal.count === 1 ? 'film' : 'films'} · {signal.percentage}%</strong>
+                      </div>
+                      <div className="signal-bar" aria-hidden="true">
+                        <span style={{ width: `${signal.percentage}%` }} />
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </article>
+
+              <article className="insights-panel">
+                <h3>Recent reaction signals</h3>
+                <p className="insights-note">Calculated from your latest five diary entries.</p>
+                {insights.recent_reaction_signals.length === 0 ? (
+                  <p className="recent-signals-empty">No selected reaction tags appear in your latest five diary entries.</p>
+                ) : (
+                  <ul className="recent-signal-list">
+                    {insights.recent_reaction_signals.map((signal) => (
+                      <li key={signal.tag}>
+                        <span>{signal.tag}</span>
+                        <strong>{signal.count} · {signal.percentage}%</strong>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section aria-labelledby="history-heading">
         <div className="section-heading">
