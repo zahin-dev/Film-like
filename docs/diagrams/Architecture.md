@@ -10,7 +10,7 @@ flowchart LR
 
     subgraph Frontend["React MVP"]
         Router["Protected React Router"]
-        Pages["Auth · Diary · Catalog · Film detail<br/>Recommendations · Read-only profile"]
+        Pages["Auth · Diary + insights · Catalog · Film detail<br/>Recommendations · Read-only profile"]
         AuthContext["AuthContext + session storage"]
         Axios["Central Axios client"]
     end
@@ -21,6 +21,7 @@ flowchart LR
             AuthRoutes["POST /auth/register<br/>POST /auth/login"]
             FilmRoutes["GET /films/search<br/>GET /films/history<br/>GET /films/{tmdb_id}<br/>POST /films/log<br/>DELETE /films/log/{tmdb_id}"]
             TagRoutes["GET /tags"]
+            InsightRoute["GET /insights"]
             RecommendationRoute["POST /recommendations"]
         end
 
@@ -28,6 +29,7 @@ flowchart LR
             AuthService["Authentication service"]
             FilmService["Film service"]
             HistoryService["Viewing-history service"]
+            InsightService["Diary-insight service"]
             RecommendationFacade["Recommendation Facade"]
         end
 
@@ -54,17 +56,20 @@ flowchart LR
     Axios --> AuthRoutes
     Axios --> FilmRoutes
     Axios --> TagRoutes
+    Axios --> InsightRoute
     Axios --> RecommendationRoute
 
     AuthRoutes --> AuthService
     FilmRoutes --> FilmService
     FilmRoutes --> HistoryService
     TagRoutes --> HistoryService
+    InsightRoute --> InsightService
     RecommendationRoute --> RecommendationFacade
 
     AuthService --> UserRepository
     FilmService --> HistoryRepository
     HistoryService --> HistoryRepository
+    InsightService --> HistoryRepository
     RecommendationFacade --> HistoryRepository
     FilmService --> TMDBClient
     HistoryService --> TMDBClient
@@ -83,11 +88,12 @@ flowchart LR
 | Component | Current responsibility |
 |---|---|
 | Root route | Return a basic API health/status message |
-| React pages and layout | Implement authentication, protected navigation, catalog search, film details, diary management, mood recommendations, and read-only profile display |
+| React pages and layout | Implement authentication, protected navigation, catalog search, film details, diary management, deterministic diary insights, mood recommendations, and read-only profile display |
 | AuthContext and Axios | Keep the JWT/public user snapshot in session storage, attach Bearer tokens centrally, and clear rejected sessions |
 | Auth routes/service | Validate schemas, register users, hash/verify passwords, and issue JWTs |
 | Film routes/service | Search TMDB, map complete details/watch providers, and report per-user history status |
 | Viewing-history service | Validate a TMDB ID, persist only the ID and user reaction, retrieve/delete entries, and concurrently enrich history display metadata |
+| Diary-insight route/service | Authenticate the request and deterministically aggregate only that user's selected tags, without TMDB or Mistral |
 | Recommendation route | Authenticate and validate the documented mood/limit request |
 | Recommendation Facade | Combine mood, tag frequencies, and recent titles; request strict Mistral output; validate/filter candidates; verify them through TMDB; retry at most once |
 | Repositories | Isolate SQLAlchemy queries and mutations for users, tags, and viewing history |
@@ -103,6 +109,8 @@ The `backend/app/schemas` package is present and defines the Pydantic v2 contrac
 - `MISTRAL_API_KEY` is optional at startup but required for live recommendations. Without it, `POST /recommendations` returns `503`.
 - A failed history enrichment leaves the stored record intact and returns null title/poster fields for that item.
 - Mistral candidates are untrusted until strict Pydantic parsing and TMDB resolution succeed.
+- Malformed Mistral output can occur. The facade requests strict JSON Schema output, validates it with Pydantic, rejects malformed candidates, retries at most once, and exposes only controlled errors when validation or verification cannot complete. Malformed candidates therefore do not reach the UI.
+- Recommendation context is rebuilt from the current mood and current stored diary tags on every request, so it changes as selected tags are added. This is dynamic request context, not online learning, fine-tuning, or automated prompt optimization.
 - Tests mock TMDB and Mistral; they verify application contracts, not current external availability.
 - The architecture is an MVP and does not include production concerns such as distributed rate limiting, background queues, or observability infrastructure.
 

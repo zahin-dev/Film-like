@@ -118,6 +118,32 @@ sequenceDiagram
 
 TMDB data returned during logging is never assigned to mapped columns. A failed retrieval enrichment produces null title/poster values for that item and never deletes or mutates the record.
 
+## Deterministic Diary Insights
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Diary dashboard
+    participant Route as GET /insights
+    participant Service as insight_service
+    participant Repo as viewing_history_repository
+    participant DB as PostgreSQL
+
+    User->>UI: Open diary dashboard
+    UI->>Route: GET /insights with JWT
+    Route->>Route: Authenticate current user
+    Route->>Service: get_diary_insights(user)
+    Service->>Repo: get_by_user(user.id)
+    Repo->>DB: SELECT only that user's entries and tags
+    DB-->>Service: Deterministically ordered diary records
+    Service->>Service: Count tagged films and selected tag frequencies
+    Service->>Service: Calculate shares and latest-five-entry signals
+    Service-->>UI: Strict DiaryInsightsResponse
+    UI->>UI: Render totals, accessible bars, or controlled states
+```
+
+Percentages are calculated from user-selected reaction tags only. Overall percentages use tagged films as the denominator; recent percentages use tagged films within the latest five diary entries. Counts are ordered by count descending and then tag name case-insensitively ascending. No Mistral or TMDB call is part of this aggregation.
+
 ## Mood-Based Recommendation Facade
 
 ```mermaid
@@ -139,31 +165,42 @@ sequenceDiagram
     Repo->>DB: SELECT entries and associations
     DB-->>Facade: User-owned reactions and TMDB IDs
     Facade->>Facade: Count tag frequencies
+    Note over Facade,DB: Context is rebuilt from current stored tags on every request
     Facade->>TMDB: Resolve recent viewed titles concurrently
     Facade->>Facade: Build controlled mood/history context
-    Facade->>MistralClient: Messages + strict Pydantic JSON Schema
-    MistralClient->>Mistral: POST /v1/chat/completions
-    Mistral-->>Facade: Structured title/year/reason candidates
-    Facade->>Facade: Strict parse, year checks, title deduplication
-
-    loop Candidate verification
-        Facade->>TMDB: Search candidate title
-        TMDB-->>Facade: TMDB Film matches
-        Facade->>Facade: Prefer year; exclude watched/duplicate IDs
+    loop First attempt plus at most one retry; stop early when enough results exist
+        Facade->>MistralClient: Messages + strict Pydantic JSON Schema
+        MistralClient->>Mistral: POST /v1/chat/completions
+        Mistral-->>MistralClient: Candidate output that may still be malformed
+        MistralClient-->>Facade: Candidate JSON text
+        alt Output passes Pydantic validation
+            Facade->>Facade: Year checks and title deduplication
+            loop Candidate verification
+                Facade->>TMDB: Search candidate title
+                TMDB-->>Facade: TMDB Film matches
+                Facade->>Facade: Prefer year; exclude watched/duplicate IDs
+            end
+        else Output is malformed
+            Facade->>Facade: Reject the malformed response
+        end
     end
 
     alt Enough verified results
         Facade-->>Route: Mood, tags used, verified films and reasons
         Route-->>UI: 200 RecommendationResponse
         UI->>UI: Display next/skip recommendation deck
-    else Structured/resolution shortfall on first attempt
-        Facade->>MistralClient: Retry once with different-candidate instruction
-    else Missing key or controlled upstream/output error
-        Facade-->>UI: 503, 504, or 502 safe error
+    else No attempt passed Pydantic validation
+        Facade-->>UI: 502 controlled malformed-output error
+    else Parsed candidates were insufficient after verification
+        Facade-->>UI: 502 controlled insufficient-results error
+    else Missing key or controlled upstream failure
+        Facade-->>UI: 503, 504, or 502 controlled error
     end
 ```
 
-The model never supplies a trusted TMDB ID. Only TMDB-resolved `Film` objects are returned. The API key, authorization header, raw prompt, and raw upstream response are not included in HTTP error details. The application starts without a Mistral key, but this endpoint then returns `503` rather than fake results.
+The model never supplies a trusted TMDB ID. Film-like requests strict JSON Schema output, validates it with Pydantic, rejects malformed candidates, and retries at most once. Malformed upstream output can still occur, but only TMDB-resolved `Film` objects or controlled errors reach the UI. The API key, authorization header, raw prompt, and raw upstream response are not included in HTTP error details. The application starts without a Mistral key, but this endpoint then returns `503` rather than fake results.
+
+Because context is rebuilt from the authenticated user's current stored tags for each request, it changes as the diary grows. This is dynamic context construction, not online learning, fine-tuning, recommendation-quality feedback learning, or automated prompt optimization.
 
 ## Future Flows - Not Implemented
 
