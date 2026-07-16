@@ -1,6 +1,6 @@
 # Film-like
 
-Film-like is a working end-to-end film-diary MVP. A user can register, sign in, search TMDB, inspect a film, record tags/tier/notes, revisit enriched viewing history, and request mood-based recommendations from Mistral AI. AI candidates are validated, filtered, and resolved through TMDB before they reach the UI.
+Film-like is a working end-to-end film-diary MVP. A user can register, sign in, search TMDB, inspect a film, record tags/tier/notes, revisit enriched viewing history, review deterministic diary reaction signals, and request mood-based recommendations from Mistral AI. AI candidates are validated, filtered, and resolved through TMDB before they reach the UI.
 
 This repository demonstrates an MVP architecture; it is not a production-ready service. Live film features depend on TMDB, and live recommendations additionally require a Mistral API key.
 
@@ -12,6 +12,7 @@ authentication
   -> protected film details
   -> viewing-history log or removal
   -> TMDB-enriched diary display
+  -> selected-tag diary insights
   -> mood + history-tag recommendation context
   -> Mistral structured candidates
   -> TMDB verification
@@ -26,6 +27,7 @@ authentication
 | Film catalog | TMDB search, details, credits, runtime, genres, posters, and French watch-provider names | Search states, result cards, protected detail view |
 | Viewing history | Create, list, and delete user-owned records | Diary cards, tags, prestige tier, notes, dates, retry/empty/error states |
 | Reactions | Seeded tags, optional `PrestigeTier`, optional personal note | Tag picker, tier selector, note input, log/remove state updates |
+| Diary insights | Authenticated deterministic aggregation of user-selected tags | Explainable totals, top/recent reaction signals, accessible bars, loading/empty/error/retry states |
 | Recommendations | Authenticated `POST /recommendations`, Mistral JSON Schema output, Recommendation Facade, TMDB verification | Eight documented mood choices, reasons, next/skip interaction, retry/exhausted states |
 | Profile | Public user fields returned by authentication | Read-only profile and logout; no invented edit API |
 | Automation | Mock-only backend tests and GitHub Actions | CI runs `npm ci`, lint, and production build |
@@ -47,6 +49,10 @@ The service-layer Recommendation Facade isolates routes and frontend code from e
 9. returns only verified `Film` objects with concise reasons.
 
 Structured-output or resolution shortfalls receive at most one retry. Missing configuration, timeouts, connection failures, rejected credentials, rate limits, malformed output, and insufficient verified results are mapped to controlled API errors without exposing keys, authorization headers, or internal prompts.
+
+Malformed model output can still occur. The facade requests strict JSON Schema output, validates the response with Pydantic, rejects malformed candidates, retries at most once, and returns a controlled error if it cannot produce enough verified results. This boundary prevents malformed AI candidates from reaching the UI; it does not claim that malformed upstream output is impossible.
+
+The recommendation service reads the authenticated user's stored diary on every request. As the user adds selected reaction tags, the tag-frequency context supplied with the current mood updates dynamically. This is request-time context assembly, not machine learning, online learning, fine-tuning, automated prompt optimization, or recommendation-quality feedback learning.
 
 Supported moods are `relaxed`, `uplifting`, `excited`, `thoughtful`, `emotional`, `romantic`, `adventurous`, and `scared`.
 
@@ -79,8 +85,8 @@ No synopsis, genre, cast, director, runtime, poster, title, or streaming-provide
 
 ```text
 React pages + AuthContext + centralized Axios client
-    -> FastAPI auth / film / tag / recommendation routes
-    -> authentication / film / viewing-history services
+    -> FastAPI auth / film / tag / insight / recommendation routes
+    -> authentication / film / viewing-history / insight services
     -> Recommendation Facade
     -> repositories -> PostgreSQL
     -> TMDB client -> TMDB API
@@ -88,6 +94,8 @@ React pages + AuthContext + centralized Axios client
 ```
 
 Routes handle HTTP concerns, services coordinate business behavior, repositories isolate database access, and external clients isolate outbound HTTP. See [System Architecture](docs/diagrams/Architecture.md), [Class Diagram](docs/diagrams/ClassDiagram.md), [ER Diagram](docs/diagrams/ERDiagram.md), and [Sequence Diagrams](docs/diagrams/SequenceDiagrams.md).
+
+Development-history claims and current implementation evidence are deliberately separated in the [Development Process Retrospective](docs/DevelopmentProcess.md). Reproducible checks and the manual live-verification boundary are recorded in [Verification Evidence](docs/Verification.md).
 
 ## Project Structure
 
@@ -112,7 +120,8 @@ Portfolio/
 │       ├── pages/
 │       ├── services/
 │       └── utils/
-└── docs/diagrams/
+├── scripts/              # Reproducible metrics and English public-text audit
+└── docs/                 # Evidence notes and current diagrams
 ```
 
 ## Getting Started
@@ -146,6 +155,12 @@ MISTRAL_API_BASE_URL=https://api.mistral.ai/v1
 
 `MISTRAL_API_KEY` is optional for application startup. Without it, all non-recommendation features remain available and `POST /recommendations` returns a clear `503` rather than fabricated recommendations.
 
+`docker-compose.yml` provides a reproducible PostgreSQL 16 development environment with a named persistent volume and a `pg_isready` healthcheck. It is development configuration, not a production database deployment. Validate the resolved configuration without starting or deleting the volume:
+
+```bash
+docker compose config
+```
+
 Start a development session:
 
 ```bash
@@ -167,6 +182,7 @@ source backend/venv/bin/activate
 | GET | `/tags` | List seeded reaction tags | Public |
 | GET | `/films/search?query={title}` | Search TMDB | Public |
 | GET | `/films/history` | Return user records enriched with current TMDB title/poster | Bearer token |
+| GET | `/insights` | Aggregate the user's selected diary reaction tags | Bearer token |
 | GET | `/films/{tmdb_id}` | Return complete TMDB details plus `in_history` | Bearer token |
 | POST | `/films/log` | Validate TMDB ID and persist only ID plus user reaction | Bearer token |
 | DELETE | `/films/log/{tmdb_id}` | Remove the user's matching history record | Bearer token |
@@ -211,6 +227,8 @@ Successful response:
 
 ## Verification
 
+See [Verification Evidence](docs/Verification.md) for the recorded command results, coverage, environment checks, and the scope of manual live verification.
+
 Backend tests use an in-memory SQLite database and mock all TMDB and Mistral calls:
 
 ```bash
@@ -229,6 +247,24 @@ npm run build
 ```
 
 The GitHub Actions workflow runs backend pytest and frontend lint/build with dummy configuration values. Passing mock-based tests demonstrates local contracts and error handling; it does not prove that TMDB or Mistral is currently available, that a supplied key is valid, or that every model response will yield enough verifiable films.
+
+Public Markdown plus backend/frontend source comments and docstrings can be audited with:
+
+```bash
+python scripts/check_english_public_text.py
+```
+
+## Reproducible Project Metrics
+
+Run the following from the repository root:
+
+```bash
+python scripts/project_metrics.py
+```
+
+The script counts physical UTF-8 lines, including blank and comment-only lines, without hard-coded totals. It excludes virtual environments, dependencies, caches, coverage output, and build output. Frontend source totals include text-based source files under `frontend/src`; total backend Python includes application code, tests, migrations, Alembic support, and seeds.
+
+The current measured result is 48 backend Python files and 4,429 physical lines. That measurement supports describing the current checkout as several thousand backend lines. It does not establish the size of the original three-month team-period snapshot. The category-level totals are recorded in [Verification Evidence](docs/Verification.md).
 
 ## MVP Boundaries and Roadmap
 

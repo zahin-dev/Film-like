@@ -80,6 +80,22 @@ class ViewingHistoryEntryResponse {
     +datetime updated_at
 }
 
+class ReactionSignalSummary {
+    <<Pydantic API response>>
+    +str tag
+    +int count
+    +float percentage
+}
+
+class DiaryInsightsResponse {
+    <<Pydantic API response>>
+    +int total_films
+    +int tagged_films
+    +int unique_reaction_signals
+    +List~ReactionSignalSummary~ top_reaction_signals
+    +List~ReactionSignalSummary~ recent_reaction_signals
+}
+
 class RecommendationRequest {
     <<Pydantic request>>
     +Mood mood
@@ -106,6 +122,8 @@ ViewingHistoryEntry "0..*" --> "0..*" Tag : viewing_history_tags
 ViewingHistoryEntry --> "0..1" PrestigeTier : optional rating
 ViewingHistoryEntryResponse ..> ViewingHistoryEntry : persisted fields
 ViewingHistoryEntryResponse ..> Film : transient title and poster
+DiaryInsightsResponse *-- ReactionSignalSummary
+DiaryInsightsResponse ..> ViewingHistoryEntry : aggregates user-owned tags
 RecommendationResponse *-- Recommendation
 Recommendation *-- Film
 ```
@@ -140,13 +158,16 @@ Tags are seeded shared reference data. `PrestigeTier` stores the display values 
 | `auth_service` | Registration, login, password hashing, JWT creation |
 | `film_service` | Map TMDB search/details/providers into `Film` contracts |
 | `viewing_history_service` | Validate IDs, manage reactions, enrich history display metadata |
+| `insight_service` | Deterministically aggregate selected reaction tags for one authenticated user; recent history means the latest five entries |
 | `recommendation_service` | Recommendation Facade: context aggregation, strict parsing, filtering, retry, TMDB verification |
 | `user_repository` | User database access |
 | `viewing_history_repository` | Tag/history database access and deterministic ordering |
 | `tmdb_client` | Outbound TMDB HTTP communication |
 | `mistral_client` | Outbound Mistral chat-completions communication with JSON Schema mode |
 
-The AI-only `AICandidate` and `AICandidateList` Pydantic models forbid extra fields, use strict types, constrain text, and reject empty candidate arrays. The facade additionally applies a release-year window based on the current year and deduplicates titles and resolved TMDB IDs.
+The AI-only `AICandidate` and `AICandidateList` Pydantic models forbid extra fields, use strict types, constrain text, and reject empty candidate arrays. The facade requests their JSON Schema from Mistral, validates returned content with Pydantic, rejects malformed candidates, applies a release-year window, and deduplicates titles and resolved TMDB IDs. It retries at most once and maps remaining malformed or insufficient output to a controlled error, so malformed candidates are not exposed to the UI. This boundary reduces risk; it does not make malformed upstream output impossible.
+
+Recommendation context is rebuilt for each request from the selected mood and the authenticated user's currently stored diary tags. Adding tags therefore changes later context dynamically without machine learning, online learning, fine-tuning, or automated prompt optimization.
 
 ## Future Concepts - Not Current Classes
 
