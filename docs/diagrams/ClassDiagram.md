@@ -173,9 +173,9 @@ Recommendation context is rebuilt for each request from the selected mood and th
 
 `WatchlistEntry`, locally stored `Film`, `Platform`, `UserPlatform`, profile-update models, social entities, and payment/subscription models do not exist in the current source. TMDB provider data is transient.
 
-## Author
+## Project Attribution
 
-**zahin-dev**
+Film-like is jointly owned, developed, and maintained by a three-person team.
 
-- University: Kanagawa Institute of Technology
-- GitHub: [@zahin-dev](https://github.com/zahin-dev)
+- Repository host and public contact: [@zahin-dev](https://github.com/zahin-dev)
+- Hosting under this account is for administrative convenience and does not indicate sole ownership or sole authorship.
