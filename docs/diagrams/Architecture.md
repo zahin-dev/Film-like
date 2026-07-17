@@ -126,9 +126,9 @@ The following remain outside the current architecture:
 
 TMDB watch-provider names in film details are informational; they are not persisted as user preferences.
 
-## Author
+## Project Attribution
 
-**zahin-dev**
+Film-like is jointly owned, developed, and maintained by a three-person team.
 
-- University: Kanagawa Institute of Technology
-- GitHub: [@zahin-dev](https://github.com/zahin-dev)
+- Repository host and public contact: [@zahin-dev](https://github.com/zahin-dev)
+- Hosting under this account is for administrative convenience and does not indicate sole ownership or sole authorship.
