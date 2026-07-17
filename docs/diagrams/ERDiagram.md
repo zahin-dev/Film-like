@@ -90,9 +90,9 @@ For each recommendation request, the facade reads the authenticated user's curre
 
 Mistral is asked for strict JSON Schema output, which is then validated with Pydantic. Malformed candidates can occur and are rejected; the facade retries at most once and returns controlled errors if necessary. Only TMDB-resolved recommendation results reach the UI, and neither raw AI output nor recommendation results are persisted.
 
-## Author
+## Project Attribution
 
-**zahin-dev**
+Film-like is jointly owned, developed, and maintained by a three-person team.
 
-- University: Kanagawa Institute of Technology
-- GitHub: [@zahin-dev](https://github.com/zahin-dev)
+- Repository host and public contact: [@zahin-dev](https://github.com/zahin-dev)
+- Hosting under this account is for administrative convenience and does not indicate sole ownership or sole authorship.
