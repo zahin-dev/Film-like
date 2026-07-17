@@ -95,7 +95,21 @@ React pages + AuthContext + centralized Axios client
 
 Routes handle HTTP concerns, services coordinate business behavior, repositories isolate database access, and external clients isolate outbound HTTP. See [System Architecture](docs/diagrams/Architecture.md), [Class Diagram](docs/diagrams/ClassDiagram.md), [ER Diagram](docs/diagrams/ERDiagram.md), and [Sequence Diagrams](docs/diagrams/SequenceDiagrams.md).
 
-Development-history claims and current implementation evidence are deliberately separated in the [Development Process Retrospective](docs/DevelopmentProcess.md). Reproducible checks and the manual live-verification boundary are recorded in [Verification Evidence](docs/Verification.md).
+The team's retrospective development context and current implementation evidence are separated in the [Development Process Retrospective](docs/DevelopmentProcess.md). Reproducible checks and the manual live-verification boundary are recorded in [Verification Evidence](docs/Verification.md).
+
+## Development Context
+
+Film-like is jointly owned, developed, and maintained by a three-person team. The repository is hosted under the `zahin-dev` GitHub account for administrative convenience and as a public contact point; this hosting arrangement does not indicate sole project ownership or sole authorship.
+
+The team built the initial MVP over approximately three months and continues to develop and improve the application with the same three members.
+
+The members have the following primary responsibilities:
+
+- one member primarily leads backend design and implementation, including API contracts, authentication, database integration, external-service integration, and the Mistral-based recommendation flow;
+- one member primarily leads frontend development, including screens, input forms, buttons, user interactions, and client-side communication with backend APIs; and
+- one member primarily leads infrastructure and project-wide coordination, including server setup, deployment, cloud configuration, CI/CD, testing, and system-design support.
+
+These responsibilities are not exclusive. All three members contribute across role boundaries through implementation, review, debugging, testing, verification, design discussions, documentation, and improvement work. The team uses GitHub to iteratively implement, review, revise, test, and improve the application through feedback and collaborative trial and error.
 
 ## Project Structure
 
@@ -264,7 +278,7 @@ python scripts/project_metrics.py
 
 The script counts physical UTF-8 lines, including blank and comment-only lines, without hard-coded totals. It excludes virtual environments, dependencies, caches, coverage output, and build output. Frontend source totals include text-based source files under `frontend/src`; total backend Python includes application code, tests, migrations, Alembic support, and seeds.
 
-The current measured result is 48 backend Python files and 4,429 physical lines. That measurement supports describing the current checkout as several thousand backend lines. It does not establish the size of the original three-month team-period snapshot. The category-level totals are recorded in [Verification Evidence](docs/Verification.md).
+The current measured result is 48 backend Python files and 4,429 physical lines. That measurement supports describing the current checkout as several thousand backend lines. It does not establish the size of the initial approximately three-month MVP phase, which was followed by continued development by the same three-person team. The category-level totals are recorded in [Verification Evidence](docs/Verification.md).
 
 ## MVP Boundaries and Roadmap
 
@@ -278,7 +292,9 @@ Current limitations are explicit:
 
 Possible future work includes watchlists, profile editing, stored platform preferences, shared lists, additional languages, cinema listings, mobile clients, and viewing-history export.
 
-## Author
+## Repository Contact
+
+Film-like is jointly owned, developed, and maintained by all three team members. The `zahin-dev` account hosts this repository for administrative convenience and serves as its public contact point; it does not represent sole ownership or sole authorship.
 
 **zahin-dev**
 

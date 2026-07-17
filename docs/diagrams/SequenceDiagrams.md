@@ -206,9 +206,9 @@ Because context is rebuilt from the authenticated user's current stored tags for
 
 Watchlists, profile editing, stored platform subscriptions, social/shared lists, payment flows, and platform-based recommendation filtering have no current routes or persistence. `/films/watchlist`, `/users/me`, `/users/me/platforms`, and `/recommendations/start` are not registered endpoints.
 
-## Author
+## Project Attribution
 
-**zahin-dev**
+Film-like is jointly owned, developed, and maintained by a three-person team.
 
-- University: Kanagawa Institute of Technology
-- GitHub: [@zahin-dev](https://github.com/zahin-dev)
+- Repository host and public contact: [@zahin-dev](https://github.com/zahin-dev)
+- Hosting under this account is for administrative convenience and does not indicate sole ownership or sole authorship.

@@ -120,11 +120,11 @@ Physical UTF-8 lines include blank and comment-only lines. Counts exclude virtua
 | Total backend Python | 48 | 4,429 |
 | `frontend/src` text source | 20 | 2,779 |
 
-The total backend category also includes Alembic support and seed Python files. These are current-checkout measurements and must not be treated as the line count of the original three-month team-period snapshot.
+The total backend category also includes Alembic support and seed Python files. These are current-checkout measurements and must not be treated as the line count of the initial approximately three-month MVP phase, which was followed by continued development by the same three-person team.
 
 ## Manual Live End-to-End Verification
 
-The repository owner self-reports that manual live end-to-end verification was completed on July 15, 2026. This was manual verification, not an automated test run or a repository-verifiable timestamped artifact. It covered:
+The project team retrospectively reports that manual live end-to-end verification was completed on July 15, 2026. This was manual verification within the continuing three-person development effort, not an automated test run or a repository-verifiable timestamped artifact. It covered:
 
 - account registration;
 - login;
