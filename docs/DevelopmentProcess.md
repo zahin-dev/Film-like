@@ -49,9 +49,9 @@ These roles were primary areas of responsibility rather than isolated ownership 
 
 ### Ongoing three-person development
 
-Development did not end after the initial MVP phase and did not transition into an individually owned project. The same three-person team continued improving the frontend, Mistral integration, automated tests, CI/CD, deployment and verification procedures, diary insights, reproducible metrics and audits, and documentation.
+Development did not end after the initial MVP phase or transition to a single-member project. The same three-person team continued improving the frontend, Mistral integration, automated tests, CI/CD, deployment and verification procedures, diary insights, reproducible metrics and audits, and documentation.
 
-The current repository therefore reflects the continuing work of the three-person team. Frontend completion, Mistral hardening, test expansion, CI/CD, verification, and documentation must not be interpreted as later individual completion by the member associated with the `zahin-dev` account.
+The current repository therefore reflects the continuing work of the three-person team. Frontend completion, Mistral hardening, test expansion, CI/CD, verification, and documentation are collaborative team outputs and must not be attributed solely to the member associated with the `zahin-dev` account.
 
 ### Role ownership and cross-functional collaboration
 
