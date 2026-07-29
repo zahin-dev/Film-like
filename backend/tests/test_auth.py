@@ -31,7 +31,9 @@ def test_openapi_metadata_is_japanese_and_local(client):
         "タグ",
         "分析",
         "推薦",
+        "システム",
     }
+    assert document["paths"]["/"]["get"]["tags"] == ["システム"]
     rendered = str(document)
     assert "Personal film diary API with TMDB integration" not in rendered
     assert "Mistral AI" not in rendered

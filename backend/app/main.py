@@ -32,6 +32,7 @@ app = FastAPI(
         {"name": "タグ", "description": "日本語の感想タグ"},
         {"name": "分析", "description": "視聴記録から算出する説明可能な集計"},
         {"name": "推薦", "description": "外部AIを使わないローカル推薦"},
+        {"name": "システム", "description": "APIの稼働状態と地域設定"},
     ],
 )
 
@@ -128,6 +129,7 @@ app.include_router(tag.router)
     "/",
     summary="稼働確認",
     description="APIの稼働状態と地域設定を返します。",
+    tags=["システム"],
 )
 def root() -> dict[str, str]:
     return {
