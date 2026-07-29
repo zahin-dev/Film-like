@@ -1,134 +1,72 @@
-# Film-like - System Architecture
+# アーキテクチャ
 
-This document separates the working MVP architecture from future product ideas. Everything in **Current Architecture** has corresponding source in this repository; roadmap components are explicitly listed later.
-
-## Current Architecture
+## 全体構成
 
 ```mermaid
 flowchart LR
-    User["Browser user"]
+    Browser["ブラウザー<br/>React / Vite<br/>主担当: aoi-dev"]
+    API["FastAPI<br/>主担当: zahin-dev"]
+    Provider["FilmCatalogProvider"]
+    Local["LocalFilmCatalogProvider"]
+    Recommender["決定的推薦エンジン"]
+    DB[("PostgreSQL<br/>映画・履歴・タグ・ユーザー")]
+    Compose["Docker Compose / CI<br/>主担当: sakamoto-dev"]
 
-    subgraph Frontend["React MVP"]
-        Router["Protected React Router"]
-        Pages["Auth · Diary + insights · Catalog · Film detail<br/>Recommendations · Read-only profile"]
-        AuthContext["AuthContext + session storage"]
-        Axios["Central Axios client"]
-    end
-
-    subgraph Backend["FastAPI"]
-        subgraph Routes["Registered routes"]
-            RootRoute["GET /"]
-            AuthRoutes["POST /auth/register<br/>POST /auth/login"]
-            FilmRoutes["GET /films/search<br/>GET /films/history<br/>GET /films/{tmdb_id}<br/>POST /films/log<br/>DELETE /films/log/{tmdb_id}"]
-            TagRoutes["GET /tags"]
-            InsightRoute["GET /insights"]
-            RecommendationRoute["POST /recommendations"]
-        end
-
-        subgraph Services["Service layer"]
-            AuthService["Authentication service"]
-            FilmService["Film service"]
-            HistoryService["Viewing-history service"]
-            InsightService["Diary-insight service"]
-            RecommendationFacade["Recommendation Facade"]
-        end
-
-        subgraph Persistence["Persistence boundary"]
-            UserRepository["User repository"]
-            HistoryRepository["Viewing-history repository"]
-        end
-
-        subgraph ExternalClients["External HTTP boundary"]
-            TMDBClient["TMDB client"]
-            MistralClient["Mistral chat-completions client"]
-        end
-    end
-
-    PostgreSQL[("PostgreSQL")]
-    TMDB["TMDB API"]
-    Mistral["Mistral AI API"]
-
-    User -. "direct health check" .-> RootRoute
-    User --> Router
-    Router --> Pages
-    Pages --> AuthContext
-    AuthContext --> Axios
-    Axios --> AuthRoutes
-    Axios --> FilmRoutes
-    Axios --> TagRoutes
-    Axios --> InsightRoute
-    Axios --> RecommendationRoute
-
-    AuthRoutes --> AuthService
-    FilmRoutes --> FilmService
-    FilmRoutes --> HistoryService
-    TagRoutes --> HistoryService
-    InsightRoute --> InsightService
-    RecommendationRoute --> RecommendationFacade
-
-    AuthService --> UserRepository
-    FilmService --> HistoryRepository
-    HistoryService --> HistoryRepository
-    InsightService --> HistoryRepository
-    RecommendationFacade --> HistoryRepository
-    FilmService --> TMDBClient
-    HistoryService --> TMDBClient
-    RecommendationFacade --> FilmService
-    RecommendationFacade --> TMDBClient
-    RecommendationFacade --> MistralClient
-
-    UserRepository --> PostgreSQL
-    HistoryRepository --> PostgreSQL
-    TMDBClient --> TMDB
-    MistralClient --> Mistral
+    Browser -->|"日本語JSON / JWT"| API
+    API --> Provider
+    Provider --> Local
+    Local --> DB
+    API --> Recommender
+    Recommender --> DB
+    Compose -. 構築・起動・検証 .-> Browser
+    Compose -. 構築・起動・検証 .-> API
+    Compose -. 構築・起動・検証 .-> DB
 ```
 
-### Current Component Responsibilities
+映画検索、詳細、履歴、分析、推薦の実行中にクラウドAPIへ接続しません。
 
-| Component | Current responsibility |
-|---|---|
-| Root route | Return a basic API health/status message |
-| React pages and layout | Implement authentication, protected navigation, catalog search, film details, diary management, deterministic diary insights, mood recommendations, and read-only profile display |
-| AuthContext and Axios | Keep the JWT/public user snapshot in session storage, attach Bearer tokens centrally, and clear rejected sessions |
-| Auth routes/service | Validate schemas, register users, hash/verify passwords, and issue JWTs |
-| Film routes/service | Search TMDB, map complete details/watch providers, and report per-user history status |
-| Viewing-history service | Validate a TMDB ID, persist only the ID and user reaction, retrieve/delete entries, and concurrently enrich history display metadata |
-| Diary-insight route/service | Authenticate the request and deterministically aggregate only that user's selected tags, without TMDB or Mistral |
-| Recommendation route | Authenticate and validate the documented mood/limit request |
-| Recommendation Facade | Combine mood, tag frequencies, and recent titles; request strict Mistral output; validate/filter candidates; verify them through TMDB; retry at most once |
-| Repositories | Isolate SQLAlchemy queries and mutations for users, tags, and viewing history |
-| PostgreSQL | Store users, tags, TMDB IDs, reactions, and tag associations—never film metadata |
-| TMDB client | Provide catalog search, film metadata, posters, credits, and watch-provider data |
-| Mistral client | Call the official chat-completions endpoint with a strict JSON Schema response format |
+## バックエンドの層
 
-The `backend/app/schemas` package is present and defines the Pydantic v2 contracts used by all routes and services.
+| 層 | 責務 |
+| --- | --- |
+| `routes` | HTTP、認証依存、日本語の公開説明 |
+| `schemas` | 入出力契約と検証 |
+| `services` | 映画、履歴、分析、認証、推薦の業務ロジック |
+| `catalog` | 映画プロバイダー抽象とローカル実装 |
+| `repositories` | SQLAlchemyによるDBアクセス |
+| `models` | ユーザー、映画、出典、タグ、視聴記録 |
+| `importing` | 出典マニフェストと映画JSONの検証・投入 |
 
-## Runtime and Failure Boundaries
+## ローカル映画プロバイダー
 
-- TMDB is required for catalog/detail operations and for display enrichment.
-- `MISTRAL_API_KEY` is optional at startup but required for live recommendations. Without it, `POST /recommendations` returns `503`.
-- A failed history enrichment leaves the stored record intact and returns null title/poster fields for that item.
-- Mistral candidates are untrusted until strict Pydantic parsing and TMDB resolution succeed.
-- Malformed Mistral output can occur. The facade requests strict JSON Schema output, validates it with Pydantic, rejects malformed candidates, retries at most once, and exposes only controlled errors when validation or verification cannot complete. Malformed candidates therefore do not reach the UI.
-- Recommendation context is rebuilt from the current mood and current stored diary tags on every request, so it changes as selected tags are added. This is dynamic request context, not online learning, fine-tuning, or automated prompt optimization.
-- Tests mock TMDB and Mistral; they verify application contracts, not current external availability.
-- The architecture is an MVP and does not include production concerns such as distributed rate limiting, background queues, or observability infrastructure.
+`FilmCatalogProvider`は検索、ローカルID取得、旧TMDB ID照合、一覧取得を定義します。既定の`LocalFilmCatalogProvider`はPostgreSQLだけを読みます。
 
-## Future Roadmap - Not Current
+旧クラウド映画APIアダプターは残していません。将来別のプロバイダーを追加する場合も、主要機能の既定経路とフォールバックはローカルカタログです。
 
-The following remain outside the current architecture:
+## フロントエンド
 
-- watchlist models, routes, services, repositories, and UI;
-- profile editing and stored streaming-platform preferences;
-- social features, shared lists, payments, or subscription management;
-- recommendation filtering by a user's subscribed platforms; and
-- production deployment, monitoring, and scaling infrastructure.
+- 認証画面
+- 映画日記と視聴傾向
+- ローカルカタログ検索
+- 映画詳細と感想入力
+- 気分選択と推薦
+- プロフィール
 
-TMDB watch-provider names in film details are informational; they are not persisted as user preferences.
+日時は`ja-JP`と`Asia/Tokyo`で表示します。ポスターがない場合は日本語の代替表示を使います。
 
-## Project Attribution
+## 配信情報
 
-Film-like is jointly owned, developed, and maintained by a three-person team.
+配信情報は`films.streaming_platforms`、`streaming_region`、`streaming_updated_at`に保存します。地域は`JP`だけを受け入れます。外部APIからリアルタイム取得せず、更新日がある場合だけ画面へ表示します。
 
-- Repository host and public contact: [@zahin-dev](https://github.com/zahin-dev)
-- Hosting under this account is for administrative convenience and does not indicate sole ownership or sole authorship.
+## セキュリティ境界
+
+- パスワードはbcryptでハッシュ化。
+- JWTは`SECRET_KEY`で署名。
+- バリデーションと予期しないエラーは日本語の安全な応答へ変換。
+- インポーターは外部ポスターURLと親ディレクトリ参照を拒否。
+- テスト中は実ソケット接続を禁止。
+- CIと設定例にクラウドAPIキーを置かない。
+
+## チームと主担当
+
+Film-likeは3名で共同開発・保守しています。フロントエンドは`aoi-dev`、バックエンドは`zahin-dev`、インフラとCIは`sakamoto-dev`が主担当です。主担当は排他的な作者を意味せず、3名がレビュー、デバッグ、テスト、設計、文書化などを横断的に行います。`zahin-dev`アカウントは管理上のリポジトリホスト兼公開連絡先であり、単独所有や単独作者を意味しません。詳細は[Ownership.md](../Ownership.md)を参照してください。

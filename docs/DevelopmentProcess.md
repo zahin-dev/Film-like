@@ -1,78 +1,47 @@
-# Film-like Development Process Retrospective
+# 開発プロセス
 
-This document explains how the current repository relates to the development-history claims in the submitted Japanese entry sheet (ES). It is a retrospective written after the work; it is not an original timestamped project artifact. It does not create evidence for dates, team-member identities, contribution percentages, issues, pull requests, or process records that were not retained.
+## プロジェクトの位置づけ
 
-## Project Context and Team Roles
+Film-likeは3名のチームで共同開発・保守しています。リポジトリが`zahin-dev`アカウント配下にあることは管理上の連絡先を示すだけで、単独所有や全ファイルの単独執筆を示しません。
 
-The following statements are retrospective facts reported by the project team:
+自己申告された開発背景は次のとおりです。
 
-- Film-like is jointly owned, developed, and maintained by a three-person team.
-- The repository is hosted under one team member's `zahin-dev` GitHub account for administrative convenience and as a public contact point. The account name does not indicate sole project ownership or sole authorship.
-- The team built the initial MVP over approximately three months and continues to develop and improve the application with the same three members.
-- One member primarily led backend design and implementation, including API contracts, authentication, database integration, external-service integration, and the Mistral-based recommendation flow.
-- One member primarily led frontend development, including screens, input forms, buttons, user interactions, and client-side communication with backend APIs.
-- One member primarily led infrastructure and project-wide coordination, including server setup, deployment, cloud configuration, CI/CD, testing, and system-design support.
-- Primary responsibilities organized the work but were not exclusive boundaries. All three members contributed outside their primary areas through implementation, review, debugging, testing, verification, design discussions, documentation, and improvement work.
-- The team used GitHub to iteratively implement, review, revise, test, and improve the application through feedback and collaborative trial and error.
-- Pair programming and process adjustments were used when work stalled so that the team could resolve blockers and maintain progress.
+- 初期MVPは3名が約3か月で共同開発した。
+- その後も同じ3名で継続して開発・保守している。
+- GitHubのブランチとレビューを使って反復した。
+- 行き詰まった箇所ではペア作業や役割横断の調査を行った。
+- バックエンド、フロントエンド、インフラに主担当を置いた。
+- 主担当は排他的な境界ではなく、全員がテスト、レビュー、デバッグ、設計、文書化に参加した。
 
-No team-member names or contribution percentages are asserted here. The current checkout also cannot establish exactly when every present-day file was written or assign every line to a specific member.
+この文書は、開発後に整理した回顧であり、当時作成されたタイムスタンプ付きの一次資料ではありません。履歴に存在しないPR番号、作業時間、貢献割合は作りません。チーム人数、初期MVPの期間、継続開発、役割分担、ペア作業など、Git履歴だけで確認できない過去の出来事はチームの自己申告として区別します。一方、現在のソース、設定、テスト、監査結果はこのチェックアウトから確認・再現できます。Git履歴やホストアカウントだけから、各ファイルの作者や各メンバーの貢献割合を断定しません。
 
-## Evidence Classification
+## 現在の主担当
 
-### Repository-verifiable facts
+- バックエンド: `zahin-dev`
+- フロントエンド: `aoi-dev`
+- インフラ: `sakamoto-dev`
 
-The current source tree and retained Git history can be inspected directly to verify:
+主担当は作業を整理するための区分であり、排他的な所有境界ではありません。3名全員が担当領域を越えて実装、レビュー、デバッグ、テスト、検証、設計、文書化、改善に参加します。詳細は[Ownership.md](Ownership.md)を参照してください。
 
-- a Python 3.12/FastAPI backend with Pydantic schemas, SQLAlchemy repositories, Alembic migrations, and PostgreSQL configuration;
-- a React frontend with authenticated diary, film-catalog, film-detail, recommendation, and diary-insight interfaces;
-- separate route, service, repository, and external-client boundaries;
-- TMDB-based film identity and metadata resolution, with only `tmdb_id` stored locally for film identity;
-- request-time recommendation context built from current mood and stored viewing tags;
-- strict Mistral JSON Schema requests, Pydantic validation, candidate filtering, at most one retry, TMDB resolution, and controlled error responses;
-- automated backend tests, frontend lint/build scripts, GitHub Actions configuration, Docker Compose configuration, and English public-text audit tooling; and
-- incremental commits in the retained Git history.
+## 日本語・ローカル完結版の進め方
 
-Repository-verifiable means that a reviewer can reproduce or inspect the fact in this checkout. It does not establish when every line was written, which member wrote each line, or the exact contribution share of any member.
+1. 修正前の外部API、環境変数、DB、英語表示、地域設定、テスト、CI、文書を調査。
+2. 調査結果を[JapaneseOfflineMigrationPlan.md](JapaneseOfflineMigrationPlan.md)へ記録。
+3. 旧`tmdb_id`を保持したままローカル映画IDへ移行。
+4. 特定映画APIに依存しないプロバイダー境界を追加。
+5. 推薦を決定的なローカル点数方式へ変更。
+6. 全主要画面、APIメッセージ、Swagger、タグ、説明を日本語化。
+7. Docker、CI、監査、インポート、担当者文書を実装に合わせて更新。
+8. テスト、カバレッジ、Lint、Production build、Composeを実行。
 
-### Self-reported retrospective facts
+現在の実装では、TMDB APIとMistral APIへの依存およびクラウドAPIキーを削除し、PostgreSQLのローカル映画カタログと決定的なローカル推薦を採用しています。日本語UI、`ja-JP`、`JP`、`Asia/Tokyo`、12件の日本語デモ映画、50件の日本語感想タグ、ローカル映画インポート、旧`tmdb_id`から`film_id`へのAlembic移行を、Docker Compose、CI、日本語公開文監査、ローカル完結構成監査とあわせて維持します。
 
-The team size, approximate initial MVP duration, continuing three-person development, role allocation, cross-functional contributions, original GitHub workflow, use of branches and pull requests, pair-programming sessions, blocker-resolution discussions, and July 15, 2026 manual live-verification result are retrospective statements from the project team. Unless separately supported by retained timestamped artifacts, this repository alone does not independently prove each event.
+## レビュー時の確認
 
-## Development Scope and Continuity
-
-### Initial MVP phase
-
-The three-person team established the project direction and built the initial MVP over approximately three months. During this phase, the backend member primarily led backend design and implementation, the frontend member primarily led user-interface and client-side integration work, and the infrastructure and project-wide coordination member primarily led environment, deployment, CI/CD, testing, and cross-system support.
-
-These roles were primary areas of responsibility rather than isolated ownership boundaries. The members coordinated API request and response formats, authentication behavior, error handling, integration issues, and system-design decisions.
-
-### Ongoing three-person development
-
-Development did not end after the initial MVP phase or transition to a single-member project. The same three-person team continued improving the frontend, Mistral integration, automated tests, CI/CD, deployment and verification procedures, diary insights, reproducible metrics and audits, and documentation.
-
-The current repository therefore reflects the continuing work of the three-person team. Frontend completion, Mistral hardening, test expansion, CI/CD, verification, and documentation are collaborative team outputs and must not be attributed solely to the member associated with the `zahin-dev` account.
-
-### Role ownership and cross-functional collaboration
-
-The backend member primarily led server-side API, authentication, persistence, external-service, and Mistral-related work, with contributions and support from the other two members. The frontend member primarily led screens, forms, controls, interaction states, and client-side API communication, with contributions and support from the other two members. The infrastructure and project-wide coordination member primarily led server setup, deployment, cloud configuration, CI/CD, testing, and system-design support, with contributions and support from the other two members.
-
-Client-side API communication and backend API contracts were coordinated across the frontend and backend roles. System-design decisions were discussed by the team, with the infrastructure and project-wide coordination member providing cross-system design support. Testing and CI/CD were primarily coordinated by the infrastructure member, while each member helped define expected behavior, review or add tests in their area, investigate failures, and improve the implementation.
-
-## Engineering Practices
-
-### Layered implementation
-
-FastAPI routes handle HTTP concerns and authentication dependencies. Services coordinate application behavior. Repositories isolate database access. External clients isolate TMDB and Mistral HTTP communication. The Recommendation Facade composes these boundaries while treating AI output as untrusted.
-
-### Incremental GitHub workflow
-
-The retained history shows incremental commits. The team retrospectively reports using GitHub branches and pull requests to iteratively implement, review, revise, and improve the application. Team members worked through technical problems together, exchanged feedback, and contributed outside their primary areas when necessary. The current checkout does not independently reconstruct every historical pull request, review, or issue, so no missing identifiers or counts are invented.
-
-### Tests and CI/CD
-
-The backend suite uses isolated test configuration and mocks external TMDB and Mistral calls. GitHub Actions runs the English public-text audit, backend tests, frontend dependency installation, lint, and production build. The infrastructure and project-wide coordination member primarily led CI/CD and testing work, while the other members contributed by defining expected behavior, adding or reviewing tests in their areas, investigating failures, and improving the implementation. These checks verify current contracts; they do not prove current availability of external services.
-
-### Pair programming and blocker resolution
-
-The team retrospectively reports that pair programming, role-crossing support, and process changes were used when work stalled. This document records that collaborative context, not a timestamped KPT record, screenshot, activity metric, or exact contribution breakdown.
+- 主要機能に外向きHTTP通信が追加されていないか。
+- 新しい環境変数がクラウドAPIキーを要求していないか。
+- DB変更に既存ユーザーの移行経路があるか。
+- 日本語の欠損表示を迂回して英語説明を表示していないか。
+- 配信情報に更新日がないのに「最新」と表現していないか。
+- インポートデータの出典と権利条件が記録されているか。
+- 主担当表示を単独作者の断定にしていないか。

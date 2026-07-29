@@ -4,10 +4,10 @@ Viewing History Entry
 This module defines the ViewingHistoryEntry SQLAlchemy model, representing
 a single film logged by a user in their personal viewing history.
 
-Each entry links a user to a TMDB film by identifier and stores the user's
+Each entry links a user to the local film catalogue and stores the user's
 personal reaction: an optional prestige tier rating, free-text note, and a set
-of mood/quality tags chosen from the shared tag list. TMDB remains the source
-of truth for all film metadata.
+of mood/quality tags chosen from the shared tag list. The former TMDB ID is
+retained only as optional migration metadata.
 
 The many-to-many relationship between entries and tags is handled by the
 viewing_history_tags association table defined in this module.
@@ -42,8 +42,9 @@ class ViewingHistoryEntry(BaseModel):
 
     Attributes:
         user_id (UUID): Foreign key to the user who logged this entry.
-        tmdb_id (int): TMDB identifier of the film. Not a foreign key.
-            Film metadata is fetched from TMDB when a response needs it.
+        film_id (int): Foreign key to the locally persisted film.
+        tmdb_id (int, optional): Former external identifier retained for
+            migration matching and legacy clients.
         tags (list[Tag]): Mood/quality labels chosen by the user.
             Loaded eagerly (lazy="joined") since tags are always needed
             when displaying a history entry.
@@ -59,8 +60,18 @@ class ViewingHistoryEntry(BaseModel):
         ForeignKey("users.id"),
         nullable=False
     )
-    tmdb_id: Mapped[int] = mapped_column(
-        nullable=False
+    film_id: Mapped[int] = mapped_column(
+        ForeignKey("films.id"),
+        nullable=False,
+        index=True,
+    )
+    # Retained for migration matching and legacy integrations. New records use
+    # film_id as their identity and do not require a TMDB identifier.
+    tmdb_id: Mapped[int | None] = mapped_column(nullable=True)
+    film: Mapped["FilmCatalog"] = relationship(
+        "FilmCatalog",
+        back_populates="viewing_history_entries",
+        lazy="joined",
     )
     tags: Mapped[list["Tag"]] = relationship(
         "Tag",

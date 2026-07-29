@@ -1,4 +1,4 @@
-function LoadingState({ message = 'Loading…' }) {
+function LoadingState({ message = '読み込み中です…' }) {
   return (
     <div className="state-panel" role="status" aria-live="polite">
       <span className="loader" aria-hidden="true" />
@@ -11,9 +11,9 @@ function ErrorState({ message, onRetry }) {
   return (
     <div className="state-panel error-panel" role="alert">
       <span className="state-symbol" aria-hidden="true">!</span>
-      <h2>We hit a snag</h2>
+      <h2>読み込みに失敗しました</h2>
       <p>{message}</p>
-      {onRetry && <button className="button secondary" type="button" onClick={onRetry}>Try again</button>}
+      {onRetry && <button className="button secondary" type="button" onClick={onRetry}>もう一度試す</button>}
     </div>
   )
 }

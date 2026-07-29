@@ -2,10 +2,10 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/authStore'
 
 const links = [
-  { to: '/dashboard', label: 'Diary' },
-  { to: '/catalog', label: 'Catalog' },
-  { to: '/recommendations', label: 'For you' },
-  { to: '/profile', label: 'Profile' },
+  { to: '/dashboard', label: '映画日記' },
+  { to: '/catalog', label: '映画を探す' },
+  { to: '/recommendations', label: 'おすすめ' },
+  { to: '/profile', label: 'プロフィール' },
 ]
 
 function AppLayout() {
@@ -20,12 +20,12 @@ function AppLayout() {
   return (
     <div className="app-shell">
       <header className="site-header">
-        <NavLink to="/dashboard" className="brand" aria-label="Film-like home">
+        <NavLink to="/dashboard" className="brand" aria-label="Film-like ホーム">
           <span className="brand-mark" aria-hidden="true">F</span>
           <span>Film-like</span>
         </NavLink>
 
-        <nav className="main-nav" aria-label="Primary navigation">
+        <nav className="main-nav" aria-label="メインナビゲーション">
           {links.map((link) => (
             <NavLink
               key={link.to}
@@ -38,11 +38,11 @@ function AppLayout() {
         </nav>
 
         <div className="header-actions">
-          <span className="header-user" title={user?.email || 'Signed in'}>
-            {user?.first_name || 'Viewer'}
+          <span className="header-user" title={user?.email || 'ログイン中'}>
+            {user?.first_name || 'ユーザー'}
           </span>
           <button className="button ghost compact" type="button" onClick={handleLogout}>
-            Log out
+            ログアウト
           </button>
         </div>
       </header>
@@ -53,7 +53,7 @@ function AppLayout() {
 
       <footer className="site-footer">
         <span>Film-like</span>
-        <span>Films from TMDB · Recommendations verified before display</span>
+        <span>ローカル映画カタログ · APIキー不要のおすすめ</span>
       </footer>
     </div>
   )

@@ -1,249 +1,186 @@
-# Film-like
+# Film-like 日本語・ローカル完結版
 
-Film-like is a working end-to-end film-diary MVP. A user can register, sign in, search TMDB, inspect a film, record tags/tier/notes, revisit enriched viewing history, review deterministic diary reaction signals, and request mood-based recommendations from Mistral AI. AI candidates are validated, filtered, and resolved through TMDB before they reach the UI.
+Film-likeは、映画の検索、詳細確認、視聴記録、感想タグの分析、今の気分に合う推薦を行うセルフホスト型の映画日記です。主要機能はPostgreSQLのローカル映画カタログだけで動作し、クラウド映画API、クラウドLLM、翻訳APIのキーを必要としません。
 
-This repository demonstrates an MVP architecture; it is not a production-ready service. Live film features depend on TMDB, and live recommendations additionally require a Mistral API key.
+このリポジトリはMVPです。公開インターネットサービスとしての本番運用、リアルタイム配信情報、大規模な映画データセットを提供するものではありません。
 
-## Core MVP Flow
+## 主な機能
 
-```text
-authentication
-  -> TMDB search
-  -> protected film details
-  -> viewing-history log or removal
-  -> TMDB-enriched diary display
-  -> selected-tag diary insights
-  -> mood + history-tag recommendation context
-  -> Mistral structured candidates
-  -> TMDB verification
-  -> recommendation deck
+- 日本語タイトルと原題によるローカル映画検索
+- 日本語タイトル、あらすじ、ジャンル、監督、出演者、上映時間の表示
+- 評価、感想タグ、個人メモを含む視聴記録
+- 選択したタグだけを使う説明可能な視聴傾向の集計
+- 気分、過去のタグ、最近のジャンル、視聴済み除外を考慮する推薦
+- 日本向けの`ja-JP`、`JP`、`Asia/Tokyo`設定
+- 出典・ライセンス情報を伴うローカルJSONインポート
+- 旧`tmdb_id`を失わずにローカル`film_id`へ移行するAlembicマイグレーション
+
+## このリポジトリでいう「完全無料版」
+
+主要機能は次のものに依存しません。
+
+- クレジットカード登録
+- 期間限定の無料枠や無料クレジット
+- 月間トークン数やリクエスト数
+- 従量課金のクラウドAPI
+- 有料プランへの移行
+- APIキー
+
+保証できる範囲は、自分のPCまたは自前サーバーでPostgreSQL、バックエンド、フロントエンドを動かすセルフホスト構成です。PC、ストレージ、通信回線、電気、ドメイン、公開サーバーの費用は含みません。Render、Vercel、Herokuなどの無料枠を恒久運用の前提にはしていません。
+
+## 構成
+
+```mermaid
+flowchart LR
+    User["日本の利用者"]
+    Frontend["Reactフロントエンド<br/>主担当: aoi-dev"]
+    Backend["FastAPIバックエンド<br/>主担当: zahin-dev"]
+    DB[("PostgreSQL<br/>映画・履歴・タグ")]
+    Infra["Docker / CI<br/>主担当: sakamoto-dev"]
+
+    User --> Frontend
+    Frontend --> Backend
+    Backend --> DB
+    Infra -. 構築・検証 .-> Frontend
+    Infra -. 構築・検証 .-> Backend
+    Infra -. 構築・検証 .-> DB
 ```
 
-## Implemented Features
+すべての矢印はセルフホスト環境内で完結します。映画検索や推薦のための外向きHTTP通信はありません。
 
-| Area | Backend | Frontend |
-|---|---|---|
-| Authentication | Registration, login, bcrypt hashes, HS256 JWT validation | Accessible registration/login forms, session state, protected routes, logout |
-| Film catalog | TMDB search, details, credits, runtime, genres, posters, and French watch-provider names | Search states, result cards, protected detail view |
-| Viewing history | Create, list, and delete user-owned records | Diary cards, tags, prestige tier, notes, dates, retry/empty/error states |
-| Reactions | Seeded tags, optional `PrestigeTier`, optional personal note | Tag picker, tier selector, note input, log/remove state updates |
-| Diary insights | Authenticated deterministic aggregation of user-selected tags | Explainable totals, top/recent reaction signals, accessible bars, loading/empty/error/retry states |
-| Recommendations | Authenticated `POST /recommendations`, Mistral JSON Schema output, Recommendation Facade, TMDB verification | Eight documented mood choices, reasons, next/skip interaction, retry/exhausted states |
-| Profile | Public user fields returned by authentication | Read-only profile and logout; no invented edit API |
-| Automation | Mock-only backend tests and GitHub Actions | CI runs `npm ci`, lint, and production build |
+## ローカル映画データ
 
-The Pydantic v2 schema package is present under `backend/app/schemas`, application imports succeed with valid environment settings, and tests use isolated configuration rather than a developer's private `.env`.
+映画は`films`テーブルへ保存されます。
 
-## Recommendation Design
+- ローカル映画ID
+- 出典キーと出典側ID
+- 移行照合用の任意`tmdb_id`
+- 日本語タイトル、原題、日本語あらすじ
+- 公開日、上映時間、ジャンル
+- 監督、出演者
+- 権利確認済みローカルポスターへのパス
+- 日本地域の配信サービス情報と情報更新日
+- 検索用の正規化タイトル
+- 推薦用の安定した気分コード
+- 作成日時、更新日時
 
-The service-layer Recommendation Facade isolates routes and frontend code from external AI communication. For each request it:
+検索文字列はUnicode NFKC、大小文字、記号、空白を正規化します。日本語タイトルがある場合は必ず日本語タイトルを表示します。日本語情報がない場合は「日本語タイトル情報はありません」「日本語のあらすじ情報はありません」などの欠損表示を使います。人名はデータ提供元が明示した表記をそのまま使い、勝手な翻訳やカタカナ化は行いません。
 
-1. reads the authenticated user's viewing history;
-2. counts history tags and resolves recent viewed titles where possible;
-3. combines that context with the selected mood;
-4. requests strict JSON Schema output from Mistral's chat-completions API;
-5. parses candidates through strict Pydantic models;
-6. rejects malformed, empty, duplicate, and unreasonable candidates;
-7. searches TMDB by candidate title and prefers a supplied year match;
-8. excludes watched and duplicate TMDB IDs; and
-9. returns only verified `Film` objects with concise reasons.
+### デモデータ
 
-Structured-output or resolution shortfalls receive at most one retry. Missing configuration, timeouts, connection failures, rejected credentials, rate limits, malformed output, and insufficient verified results are mapped to controlled API errors without exposing keys, authorization headers, or internal prompts.
+`backend/data/demo_films.json`には12件の小規模な日本語デモデータがあります。
 
-Malformed model output can still occur. The facade requests strict JSON Schema output, validates the response with Pydantic, rejects malformed candidates, retries at most once, and returns a controlled error if it cannot produce enough verified results. This boundary prevents malformed AI candidates from reaching the UI; it does not claim that malformed upstream output is impossible.
+- 提供元: Film-like日本語デモカタログ
+- 取得日: 2026-07-26
+- 内容: 題名、公開年などの事実情報と、このデモ用に新規作成した短い説明
+- ポスター: 収録なし
+- 日本語情報: あり
+- 商用利用・再配布: リポジトリ自体に明示ライセンスがない場合、許諾済みとはみなせないため個別確認が必要
 
-The recommendation service reads the authenticated user's stored diary on every request. As the user adds selected reaction tags, the tag-frequency context supplied with the current mood updates dynamically. This is request-time context assembly, not machine learning, online learning, fine-tuning, automated prompt optimization, or recommendation-quality feedback learning.
+第三者サイトから転載したあらすじや画像、大量に取得した映画データは含みません。詳細は[映画データの取り込み手順](docs/FilmDataImport.md)を参照してください。
 
-Supported moods are `relaxed`, `uplifting`, `excited`, `thoughtful`, `emotional`, `romantic`, `adventurous`, and `scared`.
+## 推薦ロジック
 
-## Data Ownership
+`POST /recommendations`は外部AIを呼び出しません。同じ入力と同じDB状態では同じ順序を返します。
 
-TMDB is the source of truth for film metadata. Film-like does not have a local `films` table and persists only `tmdb_id` for film identity. A viewing-history record stores:
+1. ローカルカタログから視聴済みの`film_id`を除外
+2. 選んだ気分と映画の気分コードが一致すれば加点
+3. 気分とジャンルの対応が一致すれば加点
+4. 過去によく選んだ感想タグと気分の対応を加点
+5. 直近5件でよく観たジャンルとの重なりを加点
+6. 点数、タイトル、公開日、ローカルIDで決定的に整列
+7. 候補不足時は未視聴作品で補完し、その事実を日本語で表示
 
-- user and TMDB identifiers;
-- optional prestige tier and personal note;
-- tag associations; and
-- timestamps.
+推薦理由は日本語テンプレートで生成します。ランダム抽選は行いません。カタログが空、または全作品を視聴済みの場合も、500系エラーにはせず制御された空結果を返します。
 
-Titles and poster URLs are retrieved from TMDB when history is returned. Enrichment requests run concurrently, preserve deterministic database ordering, and retain an entry with null display metadata if an individual TMDB lookup fails.
+## 必要な環境
 
-No synopsis, genre, cast, director, runtime, poster, title, or streaming-provider metadata is persisted locally.
+- Docker EngineまたはDocker Desktop
+- Docker Compose v2
 
-## Tech Stack
+手動開発を行う場合はPython 3.12系、Node.js 20系、PostgreSQL 16も使用します。
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 19, React Router 7, Axios, Tailwind CSS 4, Vite 8 |
-| Backend | Python 3.12, FastAPI, Pydantic v2, httpx |
-| Persistence | PostgreSQL 16, SQLAlchemy 2, Alembic |
-| Authentication | JWT (HS256), bcrypt |
-| Film metadata | TMDB API |
-| AI recommendations | Mistral chat-completions API with strict JSON Schema output |
-| Verification | pytest, pytest-cov, ESLint, Vite build, GitHub Actions |
-
-## Architecture
-
-```text
-React pages + AuthContext + centralized Axios client
-    -> FastAPI auth / film / tag / insight / recommendation routes
-    -> authentication / film / viewing-history / insight services
-    -> Recommendation Facade
-    -> repositories -> PostgreSQL
-    -> TMDB client -> TMDB API
-    -> Mistral client -> official Mistral API
-```
-
-Routes handle HTTP concerns, services coordinate business behavior, repositories isolate database access, and external clients isolate outbound HTTP. See [System Architecture](docs/diagrams/Architecture.md), [Class Diagram](docs/diagrams/ClassDiagram.md), [ER Diagram](docs/diagrams/ERDiagram.md), and [Sequence Diagrams](docs/diagrams/SequenceDiagrams.md).
-
-The team's retrospective development context and current implementation evidence are separated in the [Development Process Retrospective](docs/DevelopmentProcess.md). Reproducible checks and the manual live-verification boundary are recorded in [Verification Evidence](docs/Verification.md).
-
-## Development Context
-
-Film-like is jointly owned, developed, and maintained by a three-person team. The repository is hosted under the `zahin-dev` GitHub account for administrative convenience and as a public contact point; this hosting arrangement does not indicate sole project ownership or sole authorship.
-
-The team built the initial MVP over approximately three months and continues to develop and improve the application with the same three members.
-
-The members have the following primary responsibilities:
-
-- one member primarily leads backend design and implementation, including API contracts, authentication, database integration, external-service integration, and the Mistral-based recommendation flow;
-- one member primarily leads frontend development, including screens, input forms, buttons, user interactions, and client-side communication with backend APIs; and
-- one member primarily leads infrastructure and project-wide coordination, including server setup, deployment, cloud configuration, CI/CD, testing, and system-design support.
-
-These responsibilities are not exclusive. All three members contribute across role boundaries through implementation, review, debugging, testing, verification, design discussions, documentation, and improvement work. The team uses GitHub to iteratively implement, review, revise, test, and improve the application through feedback and collaborative trial and error.
-
-## Project Structure
-
-```text
-Portfolio/
-├── .github/workflows/ci.yml
-├── backend/
-│   ├── alembic/versions/
-│   ├── app/
-│   │   ├── external/       # TMDB and Mistral HTTP clients
-│   │   ├── models/
-│   │   ├── repositories/
-│   │   ├── routes/
-│   │   ├── schemas/        # Pydantic request/response contracts
-│   │   └── services/       # Includes Recommendation Facade
-│   ├── seeds/
-│   └── tests/
-├── frontend/
-│   └── src/
-│       ├── components/
-│       ├── context/
-│       ├── pages/
-│       ├── services/
-│       └── utils/
-├── scripts/              # Reproducible metrics and English public-text audit
-└── docs/                 # Evidence notes and current diagrams
-```
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.12 (the pinned backend dependencies are verified on 3.12)
-- Node.js 20 or newer
-- Docker Engine with Docker Compose v2
-- TMDB Read Access Token
-- Mistral API key for live recommendations only
-
-### Setup
-
-On a supported Bash environment:
-
-```bash
-./setup.sh
-```
-
-The setup script creates local environment files, installs dependencies, starts PostgreSQL, applies migrations, and seeds tags. Copy values into `backend/.env` from `backend/.env.example`:
-
-```dotenv
-DATABASE_URL=postgresql://cinemood:cinemood@localhost:5432/cinemood
-SECRET_KEY=replace_with_a_long_random_secret
-TMDB_READ_ACCESS_TOKEN=replace_with_your_tmdb_token
-MISTRAL_API_KEY=replace_with_your_mistral_key
-MISTRAL_MODEL=mistral-small-latest
-MISTRAL_API_BASE_URL=https://api.mistral.ai/v1
-```
-
-`MISTRAL_API_KEY` is optional for application startup. Without it, all non-recommendation features remain available and `POST /recommendations` returns a clear `503` rather than fabricated recommendations.
-
-`docker-compose.yml` provides a reproducible PostgreSQL 16 development environment with a named persistent volume and a `pg_isready` healthcheck. It is development configuration, not a production database deployment. Validate the resolved configuration without starting or deleting the volume:
+## Docker Composeで起動
 
 ```bash
 docker compose config
+docker compose up -d --build
 ```
 
-Start a development session:
+起動後:
 
-```bash
-source backend/venv/bin/activate
-./start.sh
-```
-
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:8000`
+- フロントエンド: `http://localhost:5173`
+- バックエンド: `http://localhost:8000`
 - Swagger UI: `http://localhost:8000/docs`
 
-## API Overview
+バックエンド起動時にAlembicマイグレーション、日本語タグ、小規模デモカタログを冪等に投入します。
 
-| Method | Endpoint | Description | Authentication |
-|---|---|---|---|
-| GET | `/` | API health message | Public |
-| POST | `/auth/register` | Create an account and return public user data plus JWT | Public |
-| POST | `/auth/login` | Validate credentials and return public user data plus JWT | Public |
-| GET | `/tags` | List seeded reaction tags | Public |
-| GET | `/films/search?query={title}` | Search TMDB | Public |
-| GET | `/films/history` | Return user records enriched with current TMDB title/poster | Bearer token |
-| GET | `/insights` | Aggregate the user's selected diary reaction tags | Bearer token |
-| GET | `/films/{tmdb_id}` | Return complete TMDB details plus `in_history` | Bearer token |
-| POST | `/films/log` | Validate TMDB ID and persist only ID plus user reaction | Bearer token |
-| DELETE | `/films/log/{tmdb_id}` | Remove the user's matching history record | Bearer token |
-| POST | `/recommendations` | Generate and verify mood-based recommendations | Bearer token |
+停止:
 
-### Recommendation Contract
-
-Request:
-
-```json
-{
-  "mood": "thoughtful",
-  "limit": 5
-}
+```bash
+docker compose down
 ```
 
-Successful response:
+DBボリュームを削除しない限り、アカウント、視聴履歴、タグ、評価、メモ、日時は保持されます。
 
-```json
-{
-  "mood": "thoughtful",
-  "history_tags_used": ["Masterpiece", "Emotional Damage"],
-  "recommendations": [
-    {
-      "film": {
-        "tmdb_id": 329865,
-        "title": "Arrival",
-        "year": 2016,
-        "genres": null,
-        "poster_url": "https://image.tmdb.org/t/p/w500/example.jpg",
-        "synopsis": "TMDB synopsis",
-        "director": null,
-        "cast": null,
-        "runtime": null,
-        "streaming_platforms": null
-      },
-      "reason": "A reflective science-fiction story with an emotional core."
-    }
-  ]
-}
+## 環境変数
+
+バックエンドの例は`backend/.env.example`です。
+
+```dotenv
+DATABASE_URL=postgresql://cinemood:cinemood@localhost:5432/cinemood
+SECRET_KEY=change_this_local_secret
+RECOMMENDATION_ENGINE=local
+APP_LOCALE=ja-JP
+APP_REGION=JP
+APP_TIMEZONE=Asia/Tokyo
 ```
 
-## Verification
+映画API、クラウドLLM、翻訳APIのキーは設定しません。
 
-See [Verification Evidence](docs/Verification.md) for the recorded command results, coverage, environment checks, and the scope of manual live verification.
+## データのインポート
 
-Backend tests use an in-memory SQLite database and mock all TMDB and Mistral calls:
+権利情報を記述した出典マニフェストと映画JSONを用意します。
+
+```bash
+cd backend
+python scripts/import_films.py \
+  --source path/to/source.json \
+  --films path/to/films.json
+```
+
+インポーターは次を検証します。
+
+- 出典、ライセンス、商用利用、再配布、取得日、更新方法
+- 日本地域`JP`
+- 対応する気分コード
+- ポスターが`/posters/`以下のローカルパスであること
+- 検索に使えるタイトルまたは別名があること
+
+外部URLのポスターは拒否します。権利を確認した画像だけを`backend/data/posters`へ置いてください。形式仕様と確認手順は[FilmDataImport.md](docs/FilmDataImport.md)にあります。
+
+## マイグレーション
+
+```bash
+cd backend
+alembic upgrade head
+python seeds/seed_tag.py
+python seeds/seed_film.py
+```
+
+`c7d4e8f1a2b3`は次を行います。
+
+- `film_data_sources`と`films`を追加
+- 既存タグへ安定した`key`、日本語表示名、日本語説明を追加
+- 既存の各`tmdb_id`に対して照合用のローカル映画行を作成
+- 視聴記録へ`film_id`外部キーを追加して既存データを関連付け
+- `tmdb_id`は削除せず任意列として保持
+
+ロールバック時、ローカル専用映画の視聴記録が存在するとマイグレーションは停止します。これは映画識別情報の無言な消失を防ぐためです。対象データをJSONへ退避してから実行してください。
+
+## テストと監査
+
+バックエンド:
 
 ```bash
 cd backend
@@ -251,56 +188,78 @@ python -m pytest -q
 python -m pytest --cov=app
 ```
 
-Frontend verification uses the committed lockfile:
+フロントエンド:
 
 ```bash
 cd frontend
 npm ci
+npm run test
 npm run lint
 npm run build
 ```
 
-The GitHub Actions workflow runs backend pytest and frontend lint/build with dummy configuration values. Passing mock-based tests demonstrates local contracts and error handling; it does not prove that TMDB or Mistral is currently available, that a supplied key is valid, or that every model response will yield enough verifiable films.
-
-Public Markdown plus backend/frontend source comments and docstrings can be audited with:
+監査:
 
 ```bash
-python scripts/check_english_public_text.py
+python scripts/check_japanese_public_text.py
+python scripts/check_offline_dependencies.py
 ```
 
-## Reproducible Project Metrics
+テストでは実ソケット接続を禁止しています。CIはPostgreSQL上で旧`tmdb_id`データのアップグレードとロールバックも検証します。
 
-Run the following from the repository root:
+## APIの主な経路
 
-```bash
-python scripts/project_metrics.py
-```
+| メソッド | パス | 内容 | 認証 |
+| --- | --- | --- | --- |
+| `POST` | `/auth/register` | アカウント登録 | 不要 |
+| `POST` | `/auth/login` | ログイン | 不要 |
+| `GET` | `/films/search?query=` | ローカル映画検索 | 不要 |
+| `GET` | `/films/{film_id}` | 映画詳細と記録状態 | 必要 |
+| `GET` | `/films/by-tmdb/{tmdb_id}` | 旧外部IDの照合 | 不要 |
+| `POST` | `/films/log` | 視聴記録を追加 | 必要 |
+| `DELETE` | `/films/log/{film_id}` | 視聴記録を削除 | 必要 |
+| `GET` | `/films/history` | 視聴履歴 | 必要 |
+| `GET` | `/tags` | 日本語タグ | 不要 |
+| `GET` | `/insights` | 視聴傾向 | 必要 |
+| `POST` | `/recommendations` | ローカル推薦 | 必要 |
 
-The script counts physical UTF-8 lines, including blank and comment-only lines, without hard-coded totals. It excludes virtual environments, dependencies, caches, coverage output, and build output. Frontend source totals include text-based source files under `frontend/src`; total backend Python includes application code, tests, migrations, Alembic support, and seeds.
+## 任意のローカルLLM
 
-The current measured result is 48 backend Python files and 4,429 physical lines. That measurement supports describing the current checkout as several thousand backend lines. It does not establish the size of the initial approximately three-month MVP phase, which was followed by continued development by the same three-person team. The category-level totals are recorded in [Verification Evidence](docs/Verification.md).
+現在の実装にはOllamaなどのローカルLLMアダプターを含めていません。モデルのライセンス、必要メモリー、出力検証を一律に保証できないためです。推薦はローカルLLMなしで動作します。
 
-## MVP Boundaries and Roadmap
+将来追加する場合も、クラウドへ送信しないこと、モデルを自動必須ダウンロードしないこと、出力をスキーマ検証すること、日本語以外の理由を返さないこと、現在の決定的推薦を必須フォールバックとして残すことが条件です。
 
-Current limitations are explicit:
+## 開発メンバーと主担当
 
-- This is an MVP, not a production-ready deployment.
-- Profile information is read-only in the UI because no profile-update API exists.
-- Watchlists, social features, shared lists, platform-preference storage, payments, and subscription filtering are not implemented.
-- TMDB watch-provider names are informational and are not user subscriptions.
-- External service availability and generated recommendation quality vary outside the mocked test suite.
+Film-likeの初期MVPは3名が約3か月で共同開発し、その後も同じ3名で継続して開発・保守しています。リポジトリを`zahin-dev`アカウントでホストしているのは管理上の都合であり、同アカウントは公開連絡先を兼ねますが、単独所有や単独作者を意味しません。
 
-Possible future work includes watchlists, profile editing, stored platform preferences, shared lists, additional languages, cinema listings, mobile clients, and viewing-history export.
+| 分野 | GitHubユーザー | 主担当内容 |
+| --- | --- | --- |
+| バックエンド | `zahin-dev` | FastAPI、API設計、認証、DB、ローカル映画カタログ、推薦処理 |
+| フロントエンド | `aoi-dev` | React、画面、フォーム、操作、API接続 |
+| インフラ | `sakamoto-dev` | Docker、サーバー、デプロイ、CI/CD、環境構築 |
 
-## Repository Contact
+これは主担当領域を示すもので、排他的な単独作者や貢献割合を示すものではありません。3名は実装、レビュー、デバッグ、テスト、設計、文書化を役割横断で行います。リポジトリが`zahin-dev`アカウント配下にあることも、プロジェクト全体の単独所有や全ファイルの単独執筆を意味しません。過去のGit作者情報は変更していません。
 
-Film-like is jointly owned, developed, and maintained by all three team members. The `zahin-dev` account hosts this repository for administrative convenience and serves as its public contact point; it does not represent sole ownership or sole authorship.
+詳しくは[CONTRIBUTORS.md](CONTRIBUTORS.md)と[Ownership.md](docs/Ownership.md)を参照してください。
 
-**zahin-dev**
+## 既知の制限
 
-- University: Kanagawa Institute of Technology
-- Faculty: Faculty of Information Technology
-- Department: Department of Information Systems
-- Year: 3rd Year Undergraduate Student
-- E-mail: islam.zahin.0116@gmail.com
-- GitHub: [@zahin-dev](https://github.com/zahin-dev)
+- 同梱カタログは動作確認用の12件だけです。
+- 配信サービス情報はリアルタイムではありません。登録した更新日がある場合だけ表示します。
+- デモにはポスター画像がありません。
+- 日本語タイトルや説明がないインポートデータは欠損表示になります。
+- 表記ゆれ検索はNFKC、空白、記号、大小文字の正規化までです。高度な読み推定は行いません。
+- プロフィール編集、共有、決済、リアルタイム配信検索は未実装です。
+- インターネット公開時のTLS、バックアップ、監視、シークレット管理は利用者が構成する必要があります。
+
+## 関連文書
+
+- [日本語・ローカル完結版の調査と移行計画](docs/JapaneseOfflineMigrationPlan.md)
+- [担当領域](docs/Ownership.md)
+- [映画データの取り込み](docs/FilmDataImport.md)
+- [アーキテクチャ](docs/diagrams/Architecture.md)
+- [ER図](docs/diagrams/ERDiagram.md)
+- [クラス構成](docs/diagrams/ClassDiagram.md)
+- [主要シーケンス](docs/diagrams/SequenceDiagrams.md)
+- [検証記録](docs/Verification.md)

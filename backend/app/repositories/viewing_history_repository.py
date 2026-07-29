@@ -80,7 +80,7 @@ def create(db: Session, entry: ViewingHistoryEntry) -> ViewingHistoryEntry:
     Args:
         db (Session): SQLAlchemy database session.
         entry (ViewingHistoryEntry): Entry instance to persist. Must have
-            user_id, tmdb_id, and tags set before being passed here.
+            user_id, film_id, and tags set before being passed here.
 
     Returns:
         ViewingHistoryEntry: The persisted entry with all database-generated
@@ -96,7 +96,7 @@ def get_by_user(db: Session, user_id: UUID) -> list[ViewingHistoryEntry]:
     """
     Retrieve all viewing history entries for a given user.
 
-    Results are ordered by creation time, TMDB ID, and UUID for deterministic
+    Results are ordered by creation time, local film ID, and UUID for deterministic
     responses, including databases with low timestamp precision.
 
     Args:
@@ -115,7 +115,7 @@ def get_by_user(db: Session, user_id: UUID) -> list[ViewingHistoryEntry]:
         .where(ViewingHistoryEntry.user_id == user_id)
         .order_by(
             ViewingHistoryEntry.created_at,
-            ViewingHistoryEntry.tmdb_id,
+            ViewingHistoryEntry.film_id,
             ViewingHistoryEntry.id,
         )
     ).unique().scalars().all()
@@ -149,6 +149,17 @@ def get_by_user_and_tmdb(
     ).unique().scalars().one_or_none()
 
 
+def get_by_user_and_film(
+    db: Session, user_id: UUID, film_id: int
+) -> ViewingHistoryEntry | None:
+    """Retrieve a user's entry using the local catalogue identity."""
+    return db.execute(
+        select(ViewingHistoryEntry)
+        .where(ViewingHistoryEntry.user_id == user_id)
+        .where(ViewingHistoryEntry.film_id == film_id)
+    ).unique().scalars().one_or_none()
+
+
 def remove(db: Session, user_id: UUID, tmdb_id: int) -> bool:
     """
     Delete a viewing history entry identified by user and TMDB film ID.
@@ -170,6 +181,16 @@ def remove(db: Session, user_id: UUID, tmdb_id: int) -> bool:
     if not entry_to_delete:
         return False
 
+    db.delete(entry_to_delete)
+    db.commit()
+    return True
+
+
+def remove_by_film(db: Session, user_id: UUID, film_id: int) -> bool:
+    """Delete a viewing-history entry by its local film identity."""
+    entry_to_delete = get_by_user_and_film(db, user_id, film_id)
+    if not entry_to_delete:
+        return False
     db.delete(entry_to_delete)
     db.commit()
     return True

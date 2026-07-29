@@ -1,14 +1,14 @@
-"""Schemas for mood-based, TMDB-verified film recommendations."""
+"""Schemas for deterministic, local mood-based recommendations."""
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from app.schemas.film import Film
 
 
 class Mood(StrEnum):
-    """Mood vocabulary supported by the recommendation prompt."""
+    """画面では日本語表示する安定した気分コード。"""
 
     RELAXED = "relaxed"
     UPLIFTING = "uplifting"
@@ -21,44 +21,25 @@ class Mood(StrEnum):
 
 
 class RecommendationRequest(BaseModel):
-    """Authenticated request for mood-based recommendations."""
+    """気分に合う映画を推薦するための入力。"""
 
     mood: Mood
     limit: int = Field(default=5, ge=1, le=10)
 
 
 class Recommendation(BaseModel):
-    """A recommendation whose film identity was verified through TMDB."""
+    """ローカルで採点した映画と説明可能な日本語理由。"""
 
     film: Film
     reason: str
 
 
 class RecommendationResponse(BaseModel):
-    """Recommendation result plus the user context disclosed to the client."""
+    """推薦結果と、採点に使用したユーザー自身の情報。"""
 
     mood: Mood
+    mood_label: str
     history_tags_used: list[str]
     recommendations: list[Recommendation]
-
-
-class AICandidate(BaseModel):
-    """Untrusted candidate shape requested from Mistral."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        strict=True,
-        str_strip_whitespace=True,
-    )
-
-    title: str = Field(min_length=1, max_length=200)
-    year: int | None = Field(default=None, ge=1888, le=2100)
-    reason: str = Field(min_length=1, max_length=400)
-
-
-class AICandidateList(BaseModel):
-    """Strict top-level structured output requested from Mistral."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    candidates: list[AICandidate] = Field(min_length=1, max_length=20)
+    fallback_used: bool = False
+    message: str | None = None

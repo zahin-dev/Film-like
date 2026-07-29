@@ -4,40 +4,45 @@ import { Poster } from '../../components/FilmCard'
 import { EmptyState, LoadingState } from '../../components/PageState'
 import api from '../../services/api'
 import { getApiError } from '../../utils/apiError'
+import usePageTitle from '../../utils/usePageTitle'
 
 const moods = [
-  { value: 'relaxed', label: 'Relaxed', cue: 'Soft landing' },
-  { value: 'uplifting', label: 'Uplifting', cue: 'Leave lighter' },
-  { value: 'excited', label: 'Excited', cue: 'High energy' },
-  { value: 'thoughtful', label: 'Thoughtful', cue: 'Ideas that linger' },
-  { value: 'emotional', label: 'Emotional', cue: 'Feel everything' },
-  { value: 'romantic', label: 'Romantic', cue: 'A little chemistry' },
-  { value: 'adventurous', label: 'Adventurous', cue: 'Go somewhere else' },
-  { value: 'scared', label: 'Scared', cue: 'Lights off' },
+  { value: 'relaxed', label: 'リラックスしたい', cue: '穏やかに楽しむ' },
+  { value: 'uplifting', label: '前向きになりたい', cue: '観終わったあと軽やかに' },
+  { value: 'excited', label: '刺激がほしい', cue: '勢いと高揚感' },
+  { value: 'thoughtful', label: 'じっくり考えたい', cue: '余韻の残るテーマ' },
+  { value: 'emotional', label: '思いきり感動したい', cue: '感情を動かす物語' },
+  { value: 'romantic', label: '恋愛気分を味わいたい', cue: '二人の関係を見つめる' },
+  { value: 'adventurous', label: '冒険したい', cue: '知らない世界へ' },
+  { value: 'scared', label: '怖い映画を観たい', cue: '緊張と恐怖を楽しむ' },
 ]
 
 function RecommendationPage() {
   const [mood, setMood] = useState('thoughtful')
   const [recommendations, setRecommendations] = useState([])
   const [historyTags, setHistoryTags] = useState([])
+  const [resultMessage, setResultMessage] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [hasRequested, setHasRequested] = useState(false)
+  usePageTitle('おすすめ')
 
   async function requestRecommendations() {
     setLoading(true)
     setError('')
+    setResultMessage('')
     setHasRequested(true)
     setActiveIndex(0)
     try {
       const response = await api.post('/recommendations', { mood, limit: 5 })
       setRecommendations(response.data.recommendations)
       setHistoryTags(response.data.history_tags_used)
+      setResultMessage(response.data.message || '')
     } catch (requestError) {
       setRecommendations([])
       setHistoryTags([])
-      setError(getApiError(requestError, 'Recommendations are unavailable right now.'))
+      setError(getApiError(requestError, 'おすすめを取得できませんでした。'))
     } finally {
       setLoading(false)
     }
@@ -50,32 +55,33 @@ function RecommendationPage() {
     <div className="page-stack recommendation-page">
       <section className="recommendation-intro">
         <div>
-          <p className="eyebrow light">Mistral AI × TMDB</p>
-          <h1>What kind of film do you need tonight?</h1>
+          <p className="eyebrow light">ローカル推薦エンジン</p>
+          <h1>今夜は、どんな気分で映画を観たいですか？</h1>
           <p>
-            Your mood meets the tags in your diary. Every AI candidate is
-            checked against TMDB before it reaches this screen.
+            選んだ気分、映画日記の感想タグ、最近観たジャンルをこのサーバー内で点数化します。
+            外部AIやクラウドAPIは使わず、視聴済みの映画は候補から除外します。
           </p>
         </div>
-        <span className="ai-orbit" aria-hidden="true">AI</span>
+        <span className="ai-orbit" aria-hidden="true">JP</span>
       </section>
 
       <section className="mood-panel" aria-labelledby="mood-heading">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Set the tone</p>
-            <h2 id="mood-heading">Choose your current mood</h2>
+            <p className="eyebrow">今の気分</p>
+            <h2 id="mood-heading">気分を一つ選んでください</h2>
           </div>
-          <span className="result-count">One choice</span>
+          <span className="result-count">1つ選択</span>
         </div>
 
-        <div className="mood-grid" role="radiogroup" aria-label="Current mood">
+        <div className="mood-grid" role="radiogroup" aria-label="現在の気分">
           {moods.map((item) => (
             <button
               key={item.value}
               type="button"
               role="radio"
               aria-checked={mood === item.value}
+              aria-label={`${item.label}：${item.cue}`}
               className={mood === item.value ? 'mood-button selected' : 'mood-button'}
               onClick={() => setMood(item.value)}
             >
@@ -86,51 +92,53 @@ function RecommendationPage() {
         </div>
 
         <button className="button primary recommendation-submit" type="button" onClick={requestRecommendations} disabled={loading}>
-          {loading ? 'Asking Mistral…' : 'Find films for this mood'}
+          {loading ? '候補を計算しています…' : 'この気分に合う映画を探す'}
         </button>
       </section>
 
-      {loading && <LoadingState message="Mistral is shaping suggestions, then Film-like is verifying them in TMDB…" />}
+      {loading && <LoadingState message="気分、感想タグ、最近の視聴傾向から候補を計算しています…" />}
 
       {!loading && error && (
         <div className="state-panel error-panel" role="alert">
           <span className="state-symbol" aria-hidden="true">!</span>
-          <h2>Recommendations are not available</h2>
+          <h2>おすすめを取得できませんでした</h2>
           <p>{error}</p>
-          <p className="state-footnote">Live recommendations require a configured Mistral API key and reachable Mistral/TMDB services.</p>
-          <button className="button secondary" type="button" onClick={requestRecommendations}>Try again</button>
+          <p className="state-footnote">推薦処理はローカルで動作します。バックエンドとデータベースの状態を確認してください。</p>
+          <button className="button secondary" type="button" onClick={requestRecommendations}>もう一度試す</button>
         </div>
       )}
 
       {!loading && !error && hasRequested && recommendations.length === 0 && (
         <EmptyState
-          title="No verified matches this time"
-          message="Try another mood. Film-like only shows suggestions it can verify through TMDB."
+          title="おすすめできる未視聴作品がありません"
+          message={resultMessage || 'ローカルカタログへ映画を追加するか、視聴記録を見直してください。'}
         />
       )}
 
       {!loading && !error && active && (
-        <section className="recommendation-deck" aria-live="polite" aria-label={`Recommendation ${activeIndex + 1} of ${recommendations.length}`}>
+        <section className="recommendation-deck" aria-live="polite" aria-label={`${recommendations.length}件中${activeIndex + 1}件目のおすすめ`}>
           <div className="deck-progress">
             <span>{activeIndex + 1} / {recommendations.length}</span>
-            <div className="progress-track"><span style={{ width: `${((activeIndex + 1) / recommendations.length) * 100}%` }} /></div>
+            <div className="progress-track" aria-hidden="true"><span style={{ width: `${((activeIndex + 1) / recommendations.length) * 100}%` }} /></div>
           </div>
+
+          {resultMessage && <p className="inline-alert recommendation-notice">{resultMessage}</p>}
 
           <article className="recommendation-card">
             <Poster film={active.film} className="recommendation-poster" />
             <div className="recommendation-copy">
-              <p className="eyebrow">Verified recommendation</p>
+              <p className="eyebrow">おすすめの理由付き</p>
               <h2>{active.film.title}</h2>
               <p className="genre-line">
-                {[active.film.year, ...(active.film.genres || [])].filter(Boolean).join(' · ') || 'TMDB verified'}
+                {[active.film.year ? `${active.film.year}年` : null, ...active.film.genres].filter(Boolean).join('・') || 'ジャンル情報はありません'}
               </p>
-              <blockquote>“{active.reason}”</blockquote>
-              {active.film.synopsis && <p className="muted">{active.film.synopsis}</p>}
+              <blockquote>「{active.reason}」</blockquote>
+              <p className="muted">{active.film.synopsis || '日本語のあらすじ情報はありません'}</p>
 
               {historyTags.length > 0 && (
                 <div className="context-note">
-                  <span>Diary signals used</span>
-                  <ul className="tag-list">
+                  <span>反映した映画日記の傾向</span>
+                  <ul className="tag-list" aria-label="推薦に反映した感想タグ">
                     {historyTags.map((tag) => <li key={tag}>{tag}</li>)}
                   </ul>
                 </div>
@@ -138,9 +146,9 @@ function RecommendationPage() {
 
               <div className="deck-actions">
                 <button className="button ghost" type="button" onClick={() => setActiveIndex((index) => index + 1)}>
-                  Skip
+                  次の候補へ
                 </button>
-                <Link className="button primary" to={`/films/${active.film.tmdb_id}`}>View film details</Link>
+                <Link className="button primary" to={`/films/${active.film.id}`}>映画の詳細を見る</Link>
               </div>
             </div>
           </article>
@@ -149,12 +157,12 @@ function RecommendationPage() {
 
       {!loading && !error && exhausted && (
         <EmptyState
-          title="You reached the end of this reel"
-          message="Replay these matches or choose a different mood for a fresh set."
+          title="今回のおすすめをすべて確認しました"
+          message="同じ候補を見直すか、別の気分を選んで再計算できます。"
           action={(
             <div className="button-row">
-              <button className="button secondary" type="button" onClick={() => setActiveIndex(0)}>Replay matches</button>
-              <button className="button primary" type="button" onClick={requestRecommendations}>Refresh this mood</button>
+              <button className="button secondary" type="button" onClick={() => setActiveIndex(0)}>最初から見る</button>
+              <button className="button primary" type="button" onClick={requestRecommendations}>もう一度計算する</button>
             </div>
           )}
         />

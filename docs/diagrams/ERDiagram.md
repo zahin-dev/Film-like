@@ -1,98 +1,90 @@
-# Film-like - Entity Relationship Diagram
-
-This diagram shows the database after the current Alembic head. TMDB remains the source of truth for every film metadata field; Film-like persists only the TMDB identifier for film identity.
-
-## Current Database Schema
+# ER図
 
 ```mermaid
 erDiagram
-    users {
+    USERS ||--o{ VIEWING_HISTORY_ENTRIES : "記録する"
+    FILM_DATA_SOURCES ||--o{ FILMS : "提供する"
+    FILMS ||--o{ VIEWING_HISTORY_ENTRIES : "参照される"
+    VIEWING_HISTORY_ENTRIES ||--o{ VIEWING_HISTORY_TAGS : "持つ"
+    TAGS ||--o{ VIEWING_HISTORY_TAGS : "選択される"
+
+    USERS {
         uuid id PK
-        varchar first_name
-        varchar last_name
-        varchar username
-        varchar email UK
-        varchar hashed_password
+        string first_name
+        string last_name
+        string username
+        string email UK
+        string hashed_password
         boolean is_admin
-        integer age "nullable"
-        timestamp created_at
-        timestamp updated_at
+        integer age
+        datetime created_at
+        datetime updated_at
     }
 
-    viewing_history_entries {
+    FILM_DATA_SOURCES {
+        string key PK
+        string display_name
+        string license_name
+        string commercial_use
+        string redistribution
+        date obtained_on
+        boolean has_japanese_metadata
+        text update_method
+    }
+
+    FILMS {
+        integer id PK
+        string source_key FK
+        string external_id
+        integer tmdb_id UK "任意・移行照合用"
+        string title_ja
+        string original_title
+        text synopsis_ja
+        date release_date
+        integer runtime_minutes
+        json genres
+        json directors
+        json cast_members
+        string poster_path
+        json streaming_platforms
+        string streaming_region
+        datetime streaming_updated_at
+        string normalized_title
+        json recommendation_moods
+        datetime created_at
+        datetime updated_at
+    }
+
+    VIEWING_HISTORY_ENTRIES {
         uuid id PK
         uuid user_id FK
-        integer tmdb_id
-        prestigetier prestige_tier "nullable"
-        text personal_note "nullable"
-        timestamp created_at
-        timestamp updated_at
+        integer film_id FK
+        integer tmdb_id "任意・旧データ保持"
+        enum prestige_tier
+        text personal_note
+        datetime created_at
+        datetime updated_at
     }
 
-    tags {
+    TAGS {
         integer id PK
-        varchar name UK
-        varchar description
+        string key UK
+        string name UK "旧値"
+        string description "旧値"
+        string display_name_ja
+        string description_ja
     }
 
-    viewing_history_tags {
+    VIEWING_HISTORY_TAGS {
         uuid viewing_history_entry_id PK,FK
         integer tag_id PK,FK
     }
-
-    users ||--o{ viewing_history_entries : owns
-    viewing_history_entries ||--o{ viewing_history_tags : has
-    tags ||--o{ viewing_history_tags : labels
 ```
 
-## Table Responsibilities
+`film_id`が現在の映画識別子です。`tmdb_id`は既存履歴の照合と将来の移行のために保持しますが、映画検索や詳細表示の必須値ではありません。
 
-### `users`
+評価Enumの英語値は既存データ互換の内部値です。APIは`prestige_tier_label`で日本語表示を追加します。
 
-Stores registration and authentication data, optional age, and reserved admin status. Email is unique. Only bcrypt password hashes are stored.
+## チーム帰属
 
-### `viewing_history_entries`
-
-Stores the minimum film reference (`tmdb_id`) plus user-owned reaction data. The table deliberately has no `title`, `poster_url`, synopsis, genre, cast, director, runtime, provider, or foreign key to a local film entity.
-
-`GET /films/history` retrieves title and poster data from TMDB concurrently. Display metadata can therefore change with TMDB and may be null for an individual item when enrichment fails; the database row remains intact.
-
-### `tags`
-
-Stores application-managed reaction tags seeded by `backend/seeds/seed_tag.py`.
-
-### `viewing_history_tags`
-
-Implements the many-to-many entry/tag relationship. Its composite primary key prevents the same tag association from being inserted twice for one entry.
-
-`GET /insights` derives diary signals from these user-owned associations at request time. It creates no insight, emotion, profile, or analytics table. Percentages are explainable shares of tagged films, not inferred sentiment or clinical analysis.
-
-## Migration State
-
-The Alembic chain preserves the historical migration that added nullable title/poster cache columns. Revision `b3d91f6a2c04` follows it and drops those columns in `upgrade()`. Its `downgrade()` restores both as nullable text columns. Earlier migrations were not rewritten.
-
-## Relationship Summary
-
-| Relationship | Type | Storage |
-|---|---|---|
-| User to viewing-history entry | One-to-many | `viewing_history_entries.user_id` → `users.id` |
-| Viewing-history entry to tag | Many-to-many | `viewing_history_tags` join table |
-
-## Prestige Tier Values
-
-`Platinum`, `Gold`, `Silver`, `Bronze`, `Coal`, and `Trash` are stored through the PostgreSQL `prestigetier` enum.
-
-## Scope Boundaries
-
-The current schema has no local `films`, `watchlist_entries`, `platforms`, `user_platforms`, recommendation, social, or payment tables. Mistral output is transient and is never persisted. Watchlists and platform preferences remain future roadmap ideas, not current database entities.
-
-For each recommendation request, the facade reads the authenticated user's current tag associations and combines their frequencies with the selected mood. The context therefore updates as stored diary tags increase, but no model training, online learning, fine-tuning, feedback learning, or automated prompt optimization is stored in this schema.
-
-Mistral is asked for strict JSON Schema output, which is then validated with Pydantic. Malformed candidates can occur and are rejected; the facade retries at most once and returns controlled errors if necessary. Only TMDB-resolved recommendation results reach the UI, and neither raw AI output nor recommendation results are persisted.
-
-## Project Attribution
-
-Film-like is jointly owned, developed, and maintained by a three-person team.
-
-- Repository host and public contact: [@zahin-dev](https://github.com/zahin-dev)
-- Hosting under this account is for administrative convenience and does not indicate sole ownership or sole authorship.
+このスキーマは3名で共同開発・保守するFilm-likeの現行構成です。バックエンドは`zahin-dev`、フロントエンドは`aoi-dev`、インフラは`sakamoto-dev`が主担当ですが、主担当は排他的な作者や貢献割合を意味しません。`zahin-dev`アカウントでのリポジトリ管理も単独所有を意味しません。

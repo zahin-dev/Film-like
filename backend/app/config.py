@@ -1,22 +1,20 @@
-"""
-Application configuration.
-
-Centralises all environment variables using Pydantic Settings.
-All settings are loaded once at startup and accessible via the settings instance.
-"""
+"""Application configuration for the self-hosted Japanese edition."""
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+    )
 
     DATABASE_URL: str
     SECRET_KEY: str
-    TMDB_READ_ACCESS_TOKEN: str
-    MISTRAL_API_KEY: str | None = None
-    MISTRAL_MODEL: str = "mistral-small-latest"
-    MISTRAL_API_BASE_URL: str = "https://api.mistral.ai/v1"
+    RECOMMENDATION_ENGINE: str = "local"
+    APP_LOCALE: str = "ja-JP"
+    APP_REGION: str = "JP"
+    APP_TIMEZONE: str = "Asia/Tokyo"
 
 
 settings = Settings()

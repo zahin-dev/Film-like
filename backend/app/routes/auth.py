@@ -18,10 +18,15 @@ from app.schemas.user import (
     )
 from app.services import auth_service
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["認証"])
 
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    status_code=status.HTTP_201_CREATED,
+    summary="アカウントを登録",
+    description="新しいアカウントを作成し、アクセストークンを返します。",
+)
 def register(
     user: UserCreate,
     db: Session = Depends(get_db)
@@ -50,7 +55,12 @@ def register(
     return auth_service.register_user(db, user)
 
 
-@router.post("/login", status_code=status.HTTP_200_OK)
+@router.post(
+    "/login",
+    status_code=status.HTTP_200_OK,
+    summary="ログイン",
+    description="メールアドレスとパスワードを確認してログインします。",
+)
 def login(
     payload: UserLogin,
     db: Session = Depends(get_db)

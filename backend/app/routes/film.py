@@ -1,191 +1,130 @@
-"""
-Film Routes
+"""Local film catalogue and viewing-history routes."""
 
-This module defines the FastAPI router for film-related endpoints.
-It handles HTTP concerns only — query parameter extraction, error
-mapping, and response forwarding. All business logic is delegated
-to film_service.
-
-Routes:
-    - GET  /films/search:          search the TMDB catalog by title
-    - GET  /films/history:         retrieve the current user's viewing history
-    - GET  /films/{tmdb_id}:       fetch full metadata for a single film
-    - POST /films/log:             log a film in the current user's history
-    - DELETE /films/log/{tmdb_id}: remove a film from the current user's history
-"""
-
-from fastapi import APIRouter, Query, HTTPException, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-import httpx
 
 from app.database import get_db
-from app.schemas.film import Film, FilmWithStatus
-from app.services import film_service
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.services import viewing_history_service
+from app.schemas.film import Film, FilmWithStatus
 from app.schemas.viewing_history import (
-    ViewingHistoryEntryCreate, ViewingHistoryEntryResponse
+    ViewingHistoryEntryCreate,
+    ViewingHistoryEntryResponse,
 )
+from app.services import film_service, viewing_history_service
 
 
-router = APIRouter(prefix="/films", tags=["films"])
+router = APIRouter(prefix="/films", tags=["映画"])
 
 
-@router.get("/search", response_model=list[Film], status_code=status.HTTP_200_OK)
-async def search_films(query: str = Query(..., min_length=1)):
-    """
-    Search the TMDB catalog by movie title.
-
-    Args:
-        query (str): Movie title to search for. Minimum 1 character.
-
-    Returns:
-        list[Film]: Partial Film objects (tmdb_id, title, year,
-            poster_url, synopsis). Fields unavailable from the search
-            endpoint (genres, cast, director, etc.) are None.
-
-    Raises:
-        HTTPException 503: If TMDB returns an error or is unreachable.
-    """
-    try:
-        return await film_service.search_films(query)
-    except httpx.HTTPStatusError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Film search service is temporarily unavailable."
-        )
-    except httpx.RequestError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not reach the film database. Please try again later."
-        )
+@router.get(
+    "/search",
+    response_model=list[Film],
+    summary="映画を検索",
+    description="ローカルカタログを日本語タイトル優先で検索します。",
+)
+def search_films(
+    query: str = Query(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="検索する日本語タイトルまたは原題",
+    ),
+    db: Session = Depends(get_db),
+) -> list[Film]:
+    return film_service.search_films(db, query)
 
 
-@router.get("/history", response_model=list[ViewingHistoryEntryResponse])
-async def get_history(
+@router.get(
+    "/history",
+    response_model=list[ViewingHistoryEntryResponse],
+    summary="視聴記録を取得",
+    description="ログイン中のユーザーが保存した視聴記録を返します。",
+)
+def get_history(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Retrieve the authenticated user's full viewing history.
-
-    Each entry contains the persisted tmdb_id and user reaction. Current title
-    and poster metadata is resolved concurrently from TMDB for this response;
-    an unavailable film keeps its history entry with null display metadata.
-
-    Returns:
-        list[ViewingHistoryEntryResponse]: All entries in the user's
-            history. Returns an empty list if none exist.
-
-    Raises:
-        HTTPException 401: If the request is not authenticated.
-    """
-    return await viewing_history_service.get_history(db, current_user)
+    db: Session = Depends(get_db),
+) -> list[ViewingHistoryEntryResponse]:
+    return viewing_history_service.get_history(db, current_user)
 
 
-@router.get("/{tmdb_id}", response_model=FilmWithStatus, status_code=status.HTTP_200_OK)
-async def get_film(
+@router.get(
+    "/by-tmdb/{tmdb_id}",
+    response_model=Film,
+    summary="旧TMDB IDで映画を照合",
+    description="移行済みデータの照合に使う後方互換エンドポイントです。",
+)
+def get_film_by_tmdb(
     tmdb_id: int,
+    db: Session = Depends(get_db),
+) -> Film:
+    film = film_service.get_film_by_tmdb_id(db, tmdb_id)
+    if film is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="指定された外部IDに対応する映画は見つかりません。",
+        )
+    return film
+
+
+@router.get(
+    "/{film_id}",
+    response_model=FilmWithStatus,
+    summary="映画詳細を取得",
+    description="ローカル映画IDで詳細と視聴記録の登録状態を返します。",
+)
+def get_film(
+    film_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Fetch full metadata for a single film and the user's history status.
-
-    Args:
-        tmdb_id (int): TMDB unique identifier of the movie.
-
-    Returns:
-        FilmWithStatus: Fully populated Film object (genres, cast, director,
-            runtime, streaming platforms) alongside in_history, which
-            indicates whether the current user has already logged this film.
-
-    Raises:
-        HTTPException 401: If the request is not authenticated.
-        HTTPException 404: If TMDB does not recognise the tmdb_id.
-        HTTPException 503: If TMDB returns another error or is unreachable.
-    """
-    try:
-        return await film_service.get_film_with_status(db, current_user, tmdb_id)
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Film {tmdb_id} not found."
-            )
+    db: Session = Depends(get_db),
+) -> FilmWithStatus:
+    result = film_service.get_film_with_status(db, current_user, film_id)
+    if result is None:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Film detail service is temporarily unavailable."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="指定された映画はローカルカタログにありません。",
         )
-    except httpx.RequestError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not reach the film database. Please try again later."
-        )
+    return result
 
-@router.post("/log", response_model=ViewingHistoryEntryResponse, status_code=status.HTTP_201_CREATED)
-async def log_film(
+
+@router.post(
+    "/log",
+    response_model=ViewingHistoryEntryResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="視聴記録へ追加",
+    description="ローカル映画IDと感想・評価・タグを保存します。",
+)
+def log_film(
     payload: ViewingHistoryEntryCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Log a film in the authenticated user's viewing history.
-
-    Validates the TMDB identifier, then stores only the identifier and the
-    user's reaction. Film metadata returned here is not persisted.
-
-    Args:
-        payload (ViewingHistoryEntryCreate): tmdb_id, optional tag_ids,
-            optional prestige_tier, and optional personal_note.
-
-    Returns:
-        ViewingHistoryEntryResponse: The created entry with all fields
-            populated, including title, poster_url, and resolved tags.
-
-    Raises:
-        HTTPException 401: If the request is not authenticated.
-        HTTPException 422: If the payload fails validation.
-        HTTPException 503: If TMDB is unreachable.
-    """
-    try:
-        return await viewing_history_service.create_entry(db, current_user, payload)
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Film {payload.tmdb_id} not found."
-            )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Film service temporarily unavailable."
-        )
-    except httpx.RequestError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not reach the film database. Please try again later."
-        )
+    db: Session = Depends(get_db),
+) -> ViewingHistoryEntryResponse:
+    return viewing_history_service.create_entry(db, current_user, payload)
 
 
-@router.delete("/log/{tmdb_id}", status_code=status.HTTP_200_OK)
-def remove_film(
+@router.delete(
+    "/log/by-tmdb/{tmdb_id}",
+    summary="旧TMDB IDで視聴記録を削除",
+    description="旧クライアント向けの後方互換エンドポイントです。",
+)
+def remove_film_by_tmdb(
     tmdb_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Remove a film from the authenticated user's viewing history.
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    viewing_history_service.remove_entry_by_tmdb(db, current_user, tmdb_id)
+    return {"detail": "視聴記録から削除しました。"}
 
-    Args:
-        tmdb_id (int): TMDB identifier of the film to remove.
 
-    Returns:
-        dict: Confirmation message.
-
-    Raises:
-        HTTPException 401: If the request is not authenticated.
-        HTTPException 404: If the user has no history entry for this film.
-    """
-    viewing_history_service.remove_entry(db, current_user, tmdb_id)
-    return {"detail": "Film removed from history."}
+@router.delete(
+    "/log/{film_id}",
+    summary="視聴記録から削除",
+    description="ローカル映画IDに一致する自分の視聴記録を削除します。",
+)
+def remove_film(
+    film_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    viewing_history_service.remove_entry(db, current_user, film_id)
+    return {"detail": "視聴記録から削除しました。"}
