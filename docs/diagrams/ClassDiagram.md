@@ -77,4 +77,6 @@ classDiagram
 - `ViewingHistoryEntryCreate`: 新`film_id`と旧`tmdb_id`の両方を受理。
 - `TagResponse`: 英語の保存値ではなく日本語表示名と説明を返す。
 
-主担当は、バックエンド境界が`zahin-dev`、React表示が`aoi-dev`、実行・CIが`sakamoto-dev`です。これは単独作者の指定ではありません。
+## チームと主担当
+
+バックエンド境界は`zahin-dev`、React表示は`aoi-dev`、実行環境とCIは`sakamoto-dev`が主担当です。Film-likeは3名で共同開発・保守しており、この区分は単独作者や排他的な所有を示しません。3名はレビュー、デバッグ、テスト、設計、文書化を横断的に行います。`zahin-dev`アカウントでのホストは管理上の都合であり、単独所有を意味しません。

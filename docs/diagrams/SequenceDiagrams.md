@@ -92,3 +92,7 @@ sequenceDiagram
         DB-->>Admin: 取り込み件数
     end
 ```
+
+## チームと主担当
+
+Film-likeは3名で共同開発・保守しています。Reactフローは`aoi-dev`、FastAPIとローカル業務ロジックは`zahin-dev`、DockerとCIは`sakamoto-dev`が主担当です。主担当は単独作者を意味せず、3名がレビュー、デバッグ、テスト、設計、文書化を横断的に行います。`zahin-dev`アカウントは管理上のホスト兼公開連絡先であり、単独所有を意味しません。

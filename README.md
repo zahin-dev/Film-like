@@ -231,9 +231,11 @@ python scripts/check_offline_dependencies.py
 
 ## 開発メンバーと主担当
 
+Film-likeの初期MVPは3名が約3か月で共同開発し、その後も同じ3名で継続して開発・保守しています。リポジトリを`zahin-dev`アカウントでホストしているのは管理上の都合であり、同アカウントは公開連絡先を兼ねますが、単独所有や単独作者を意味しません。
+
 | 分野 | GitHubユーザー | 主担当内容 |
 | --- | --- | --- |
-| バックエンド | `zahin-dev` | FastAPI、API設計、認証、DB、外部連携、推薦処理 |
+| バックエンド | `zahin-dev` | FastAPI、API設計、認証、DB、ローカル映画カタログ、推薦処理 |
 | フロントエンド | `aoi-dev` | React、画面、フォーム、操作、API接続 |
 | インフラ | `sakamoto-dev` | Docker、サーバー、デプロイ、CI/CD、環境構築 |
 
