@@ -23,14 +23,14 @@ import jwt
 
 # HTTPBearer extracts the token from the Authorization: Bearer <token> header.
 # auto_error=True (default) returns 403 automatically if the header is absent.
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 # Must match the algorithm used in auth_service.py when the token was signed.
 _ALGORITHM = "HS256"
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db)
 ) -> User:
     """
@@ -53,6 +53,12 @@ def get_current_user(
         HTTPException 401: If the token is expired, malformed,
             missing the sub claim, or the user no longer exists.
     """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="ログインが必要です。",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     token = credentials.credentials
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[_ALGORITHM])
@@ -62,18 +68,18 @@ def get_current_user(
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token expired"
+            detail="ログインの有効期限が切れました。もう一度ログインしてください。"
         )
     except jwt.InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
+            detail="認証情報が正しくありません。"
         )
 
     user = user_repository.get_by_id(db, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
+            detail="ユーザーが見つかりません。"
         )
     return user

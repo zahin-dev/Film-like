@@ -1,22 +1,15 @@
-"""Recommendation Facade combining user context, Mistral, and TMDB."""
+"""Deterministic local recommendation engine with Japanese explanations."""
 
-import asyncio
 from collections import Counter
-from datetime import datetime, timezone
-import json
+from dataclasses import dataclass
 
-import httpx
-from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.external import mistral_client, tmdb_client
+from app.models.film_catalog import FilmCatalog
 from app.models.user import User
 from app.models.viewing_history_entry import ViewingHistoryEntry
 from app.repositories import viewing_history_repository
-from app.schemas.film import Film
 from app.schemas.recommendation import (
-    AICandidate,
-    AICandidateList,
     Mood,
     Recommendation,
     RecommendationResponse,
@@ -24,215 +17,219 @@ from app.schemas.recommendation import (
 from app.services import film_service
 
 
-class RecommendationServiceError(RuntimeError):
-    """Safe application error that can be exposed by the API route."""
+MOOD_LABELS: dict[Mood, str] = {
+    Mood.RELAXED: "リラックスしたい",
+    Mood.UPLIFTING: "前向きになりたい",
+    Mood.EXCITED: "刺激がほしい",
+    Mood.THOUGHTFUL: "じっくり考えたい",
+    Mood.EMOTIONAL: "思いきり感動したい",
+    Mood.ROMANTIC: "恋愛気分を味わいたい",
+    Mood.ADVENTUROUS: "冒険したい",
+    Mood.SCARED: "怖い映画を観たい",
+}
 
-    def __init__(self, status_code: int, detail: str):
-        super().__init__(detail)
-        self.status_code = status_code
-        self.detail = detail
+MOOD_GENRES: dict[Mood, set[str]] = {
+    Mood.RELAXED: {"コメディ", "日常", "ファミリー"},
+    Mood.UPLIFTING: {"コメディ", "青春", "音楽", "ファミリー"},
+    Mood.EXCITED: {"アクション", "SF", "サスペンス"},
+    Mood.THOUGHTFUL: {"ドラマ", "ミステリー", "社会派", "SF"},
+    Mood.EMOTIONAL: {"ドラマ", "家族", "青春"},
+    Mood.ROMANTIC: {"恋愛", "ドラマ", "青春"},
+    Mood.ADVENTUROUS: {"冒険", "アクション", "ファンタジー", "SF"},
+    Mood.SCARED: {"ホラー", "サスペンス", "ミステリー"},
+}
+
+TAG_MOOD_AFFINITY: dict[str, set[Mood]] = {
+    "feel-good": {Mood.RELAXED, Mood.UPLIFTING},
+    "heartwarming": {Mood.RELAXED, Mood.UPLIFTING, Mood.EMOTIONAL},
+    "heartbreaking": {Mood.EMOTIONAL},
+    "hilarious": {Mood.RELAXED, Mood.UPLIFTING},
+    "terrifying": {Mood.SCARED},
+    "fun-jump-scares": {Mood.SCARED, Mood.EXCITED},
+    "epic": {Mood.EXCITED, Mood.ADVENTUROUS},
+    "cozy-watch": {Mood.RELAXED},
+    "unsettling": {Mood.SCARED, Mood.THOUGHTFUL},
+    "bittersweet": {Mood.EMOTIONAL, Mood.ROMANTIC},
+    "mind-blowing": {Mood.THOUGHTFUL, Mood.EXCITED},
+    "conversation-starter": {Mood.THOUGHTFUL},
+    "visual-feast": {Mood.ADVENTUROUS, Mood.EXCITED},
+    "slow-burn": {Mood.THOUGHTFUL},
+    "perfect-for-a-date": {Mood.ROMANTIC},
+    "family-friendly": {Mood.RELAXED, Mood.UPLIFTING},
+}
+
+RECENT_HISTORY_LIMIT = 5
 
 
-_SYSTEM_PROMPT = """You recommend feature films for a personal movie diary.
-Return only the requested JSON object. Suggest real, released feature films
-that fit the current mood and the supplied preference context. Never invent
-TMDB identifiers. Avoid every recently viewed title and give one concise,
-specific reason per candidate."""
+@dataclass(frozen=True)
+class _ScoredFilm:
+    film: FilmCatalog
+    score: int
+    mood_match: bool
+    matched_genres: tuple[str, ...]
+    history_signal: str | None
+    recent_genre: str | None
 
-_RECENT_HISTORY_LIMIT = 10
-_MAX_ATTEMPTS = 2
 
-
-async def recommend(
+def recommend(
     db: Session,
     user: User,
     mood: Mood,
     limit: int,
 ) -> RecommendationResponse:
-    """Return Mistral-suggested candidates only after TMDB verification."""
+    """Rank local films without randomness, network calls, or API keys."""
     entries = viewing_history_repository.get_by_user(db, user.id)
-    watched_ids = {entry.tmdb_id for entry in entries}
+    watched_ids = {entry.film_id for entry in entries}
     tag_counts = _tag_frequencies(entries)
-    recent_titles = await _resolve_recent_titles(entries)
-    candidate_count = min(20, max(8, limit * 2))
+    recent_genres = _recent_genre_frequencies(entries)
+    candidates = [
+        record
+        for record in film_service.get_catalog_records(db)
+        if record.id not in watched_ids
+    ]
 
-    recommendations: list[Recommendation] = []
-    seen_candidate_titles: set[str] = set()
-    seen_tmdb_ids: set[int] = set()
-    parsed_at_least_once = False
-
-    for attempt in range(_MAX_ATTEMPTS):
-        messages = _build_messages(
-            mood=mood,
-            tag_counts=tag_counts,
-            recent_titles=recent_titles,
-            candidate_count=candidate_count,
-            retry=attempt > 0,
+    scored = [
+        _score_film(record, mood, tag_counts, recent_genres)
+        for record in candidates
+    ]
+    scored.sort(
+        key=lambda item: (
+            -item.score,
+            item.film.title_ja or "",
+            item.film.release_date.isoformat() if item.film.release_date else "",
+            item.film.id,
         )
-        try:
-            raw_output = await mistral_client.complete_structured(
-                messages=messages,
-                response_schema=AICandidateList.model_json_schema(),
-            )
-        except mistral_client.MistralNotConfiguredError as exc:
-            raise RecommendationServiceError(
-                503, "AI recommendation service is not configured."
-            ) from exc
-        except httpx.TimeoutException as exc:
-            raise RecommendationServiceError(
-                504, "AI recommendation service timed out."
-            ) from exc
-        except httpx.RequestError as exc:
-            raise RecommendationServiceError(
-                503, "AI recommendation service is temporarily unreachable."
-            ) from exc
-        except httpx.HTTPStatusError as exc:
-            detail = _upstream_status_detail(exc.response.status_code)
-            raise RecommendationServiceError(503, detail) from exc
-        except mistral_client.MistralResponseError:
-            raw_output = ""
+    )
 
-        try:
-            candidate_list = AICandidateList.model_validate_json(raw_output)
-        except ValidationError:
-            continue
+    positive = [item for item in scored if item.score > 0]
+    fallback_used = (
+        len(positive) < min(limit, len(scored))
+        or len(scored) < limit
+    )
+    selected = positive[:limit]
+    selected_ids = {item.film.id for item in selected}
+    if len(selected) < limit:
+        selected.extend(
+            item
+            for item in scored
+            if item.film.id not in selected_ids
+        )
+        selected = selected[:limit]
 
-        parsed_at_least_once = True
-        candidates = _unique_candidates(
-            candidate_list.candidates, seen_candidate_titles
+    recommendations = [
+        Recommendation(
+            film=film_service.film_from_record(item.film),
+            reason=_build_reason(item, mood, fallback_used=item.score == 0),
         )
-        verified = await _verify_candidates(
-            candidates,
-            watched_ids=watched_ids,
-            seen_tmdb_ids=seen_tmdb_ids,
+        for item in selected
+    ]
+    history_tags_used = [
+        display_name
+        for _, (display_name, _) in sorted(
+            tag_counts.items(),
+            key=lambda item: (-item[1][1], item[1][0]),
         )
-        recommendations.extend(verified)
-        if len(recommendations) >= limit:
-            return RecommendationResponse(
-                mood=mood,
-                history_tags_used=list(tag_counts),
-                recommendations=recommendations[:limit],
-            )
+    ][:5]
+    message = None
+    if not candidates:
+        message = "未視聴の候補がありません。カタログに映画を追加してください。"
+    elif len(recommendations) < limit:
+        message = "未視聴の候補が少ないため、取得できた範囲で表示しています。"
+    elif fallback_used:
+        message = "条件に強く一致する候補が少ないため、未視聴作品から補完しました。"
 
-    if not parsed_at_least_once:
-        raise RecommendationServiceError(
-            502, "AI recommendation service returned malformed output."
-        )
-    raise RecommendationServiceError(
-        502, "Not enough verified recommendations were available."
+    return RecommendationResponse(
+        mood=mood,
+        mood_label=MOOD_LABELS[mood],
+        history_tags_used=history_tags_used,
+        recommendations=recommendations,
+        fallback_used=fallback_used,
+        message=message,
     )
 
 
-def _tag_frequencies(entries: list[ViewingHistoryEntry]) -> dict[str, int]:
-    counts = Counter(tag.name for entry in entries for tag in entry.tags)
-    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0].casefold())))
-
-
-async def _resolve_recent_titles(
+def _tag_frequencies(
     entries: list[ViewingHistoryEntry],
-) -> list[str]:
-    recent = entries[-_RECENT_HISTORY_LIMIT:]
-
-    async def resolve(entry: ViewingHistoryEntry) -> str | None:
-        try:
-            data = await tmdb_client.get_movie_basic(entry.tmdb_id)
-        except httpx.HTTPError:
-            return None
-        title = data.get("title")
-        return title.strip() if isinstance(title, str) and title.strip() else None
-
-    if not recent:
-        return []
-    resolved = await asyncio.gather(*(resolve(entry) for entry in recent))
-    return [title for title in resolved if title]
-
-
-def _build_messages(
-    mood: Mood,
-    tag_counts: dict[str, int],
-    recent_titles: list[str],
-    candidate_count: int,
-    retry: bool,
-) -> list[dict[str, str]]:
-    context = {
-        "current_mood": mood.value,
-        "history_tag_frequencies": [
-            {"tag": tag, "count": count} for tag, count in tag_counts.items()
-        ],
-        "recent_viewed_titles": recent_titles,
-        "candidate_count": candidate_count,
-        "requirements": [
-            "Return different titles with no duplicates.",
-            "Use release years only when reasonably confident.",
-            "Do not repeat any recent viewed title.",
-        ],
+) -> dict[str, tuple[str, int]]:
+    counts = Counter(tag.key for entry in entries for tag in entry.tags)
+    labels = {
+        tag.key: tag.display_name_ja
+        for entry in entries
+        for tag in entry.tags
     }
-    if retry:
-        context["retry_instruction"] = (
-            "The previous candidates could not all be validated. Return different, "
-            "well-known films that are likely to resolve unambiguously in TMDB."
-        )
-    return [
-        {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user", "content": json.dumps(context, ensure_ascii=True)},
+    return {
+        key: (labels[key], count)
+        for key, count in counts.items()
+    }
+
+
+def _recent_genre_frequencies(
+    entries: list[ViewingHistoryEntry],
+) -> Counter[str]:
+    recent = entries[-RECENT_HISTORY_LIMIT:]
+    return Counter(
+        genre
+        for entry in recent
+        for genre in (entry.film.genres or [])
+    )
+
+
+def _score_film(
+    film: FilmCatalog,
+    mood: Mood,
+    tag_counts: dict[str, tuple[str, int]],
+    recent_genres: Counter[str],
+) -> _ScoredFilm:
+    film_moods = set(film.recommendation_moods or [])
+    mood_match = mood.value in film_moods
+    score = 50 if mood_match else 0
+
+    matched_genres = tuple(sorted(set(film.genres or []) & MOOD_GENRES[mood]))
+    score += len(matched_genres) * 12
+
+    history_signal = None
+    for key, (display_name, count) in sorted(
+        tag_counts.items(),
+        key=lambda item: (-item[1][1], item[1][0]),
+    ):
+        if mood in TAG_MOOD_AFFINITY.get(key, set()):
+            score += min(count, 3) * 5
+            history_signal = display_name
+            break
+
+    recent_overlap = [
+        (genre, recent_genres[genre])
+        for genre in (film.genres or [])
+        if recent_genres[genre] > 0
     ]
+    recent_overlap.sort(key=lambda item: (-item[1], item[0]))
+    recent_genre = recent_overlap[0][0] if recent_overlap else None
+    if recent_genre:
+        score += min(recent_genres[recent_genre], 3) * 3
+
+    return _ScoredFilm(
+        film=film,
+        score=score,
+        mood_match=mood_match,
+        matched_genres=matched_genres,
+        history_signal=history_signal,
+        recent_genre=recent_genre,
+    )
 
 
-def _unique_candidates(
-    candidates: list[AICandidate],
-    seen_titles: set[str],
-) -> list[AICandidate]:
-    unique: list[AICandidate] = []
-    current_year = datetime.now(timezone.utc).year
-    for candidate in candidates:
-        key = " ".join(candidate.title.casefold().split())
-        if key in seen_titles:
-            continue
-        seen_titles.add(key)
-        if candidate.year is not None and not 1888 <= candidate.year <= current_year + 2:
-            continue
-        unique.append(candidate)
-    return unique
+def _build_reason(item: _ScoredFilm, mood: Mood, fallback_used: bool) -> str:
+    title = item.film.title_ja or "この作品"
+    if fallback_used:
+        return (
+            f"「{MOOD_LABELS[mood]}」に強く一致する候補が少ないため、"
+            f"未視聴の{title}をカタログから選びました。"
+        )
 
-
-async def _verify_candidates(
-    candidates: list[AICandidate],
-    watched_ids: set[int],
-    seen_tmdb_ids: set[int],
-) -> list[Recommendation]:
-    async def search(candidate: AICandidate) -> tuple[AICandidate, list[Film]]:
-        try:
-            films = await film_service.search_films(candidate.title)
-        except (httpx.HTTPError, KeyError, TypeError, ValueError):
-            films = []
-        return candidate, films
-
-    resolved = await asyncio.gather(*(search(candidate) for candidate in candidates))
-    recommendations: list[Recommendation] = []
-    for candidate, films in resolved:
-        film = _select_film(films, candidate.year)
-        if film is None:
-            continue
-        if film.tmdb_id in watched_ids or film.tmdb_id in seen_tmdb_ids:
-            continue
-        seen_tmdb_ids.add(film.tmdb_id)
-        recommendations.append(Recommendation(film=film, reason=candidate.reason))
-    return recommendations
-
-
-def _select_film(films: list[Film], year: int | None) -> Film | None:
-    if not films:
-        return None
-    if year is not None:
-        matched = next((film for film in films if film.year == year), None)
-        if matched is not None:
-            return matched
-    return films[0]
-
-
-def _upstream_status_detail(status_code: int) -> str:
-    if status_code in {401, 403}:
-        return "AI recommendation service credentials were rejected."
-    if status_code == 429:
-        return "AI recommendation service is rate limited. Please try again later."
-    return "AI recommendation service is temporarily unavailable."
+    parts = [f"「{MOOD_LABELS[mood]}」という今の気分に合う作品です"]
+    if item.matched_genres:
+        parts.append(f"{'・'.join(item.matched_genres)}の要素があります")
+    if item.history_signal:
+        parts.append(f"視聴記録の「{item.history_signal}」という傾向も反映しました")
+    elif item.recent_genre:
+        parts.append(f"最近よく観ている{item.recent_genre}の傾向も反映しました")
+    return "。".join(parts) + "。"

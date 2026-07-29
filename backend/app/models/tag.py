@@ -27,10 +27,10 @@ class Tag(Base):
 
     Attributes:
         id (int): Auto-incremented integer primary key.
-        name (str): Unique display label. Maximum 30 characters.
-            Example: "Hidden Gem", "Comfort Movie".
-        description (str): Short explanation shown in the UI.
-            Maximum 255 characters.
+        key (str): Stable code used by recommendation logic.
+        name (str): Legacy English value retained for data compatibility.
+        display_name_ja (str): Natural Japanese label shown in the UI.
+        description_ja (str): Japanese explanation shown in the UI.
     """
 
     __tablename__ = "tags"
@@ -40,6 +40,11 @@ class Tag(Base):
         primary_key=True,
         autoincrement=True
     )
+    key: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+    )
     name: Mapped[str] = mapped_column(
         String(30),
         unique=True,
@@ -48,4 +53,12 @@ class Tag(Base):
     description: Mapped[str] = mapped_column(
         String(255),
         nullable=False
+    )
+    display_name_ja: Mapped[str] = mapped_column(
+        String(60),
+        nullable=False,
+    )
+    description_ja: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
     )

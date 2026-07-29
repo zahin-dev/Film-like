@@ -54,7 +54,9 @@ def _summarize_signals(
     if tagged_films == 0:
         return []
 
-    counts = Counter(tag.name for entry in entries for tag in entry.tags)
+    counts = Counter(
+        tag.display_name_ja for entry in entries for tag in entry.tags
+    )
     ordered_counts = sorted(
         counts.items(),
         key=lambda item: (-item[1], item[0].casefold(), item[0]),

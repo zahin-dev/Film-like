@@ -1,10 +1,10 @@
-"""Strict response contracts for deterministic diary reaction insights."""
+"""映画日記の決定的な視聴傾向を返すスキーマ。"""
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class ReactionSignalSummary(BaseModel):
-    """Count and tagged-film share for one user-selected reaction tag."""
+    """ユーザーが選んだ一つのタグの件数と割合。"""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -14,7 +14,7 @@ class ReactionSignalSummary(BaseModel):
 
 
 class DiaryInsightsResponse(BaseModel):
-    """Aggregated reaction signals from one authenticated user's diary."""
+    """ログイン中ユーザーの映画日記から集計した視聴傾向。"""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 

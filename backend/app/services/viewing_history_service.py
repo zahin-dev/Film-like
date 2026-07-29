@@ -1,160 +1,137 @@
-"""
-Viewing History Service
+"""Viewing-history operations using the local film catalogue."""
 
-This module implements the business logic for viewing history operations
-in the Film-like application.
-
-It orchestrates entry creation, history retrieval, and entry removal.
-Input validation is handled upstream by Pydantic schemas, and data
-persistence is delegated to the viewing history repository.
-
-Functions:
-    - get_all_tags: return all available tags
-    - create_entry: log a new film in the user's viewing history
-    - get_history: retrieve the full viewing history of a user
-    - remove_entry: remove a film from the user's viewing history
-"""
-
-import asyncio
-
-import httpx
-from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from app.repositories import viewing_history_repository
-from app.schemas.viewing_history import (
-    TagResponse, ViewingHistoryEntryCreate, ViewingHistoryEntryResponse
-)
-from app.models.viewing_history_entry import ViewingHistoryEntry
-from app.models.user import User
-from app.external import tmdb_client
+from sqlalchemy.orm import Session
 
-# Reuse the same image base URL as film_service
-_POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500"
+from app.models.prestige_tier import PrestigeTier
+from app.models.user import User
+from app.models.viewing_history_entry import ViewingHistoryEntry
+from app.repositories import film_catalog_repository, viewing_history_repository
+from app.schemas.viewing_history import (
+    TagResponse,
+    ViewingHistoryEntryCreate,
+    ViewingHistoryEntryResponse,
+)
+
+
+PRESTIGE_LABELS: dict[PrestigeTier, str] = {
+    PrestigeTier.PLATINUM: "最高傑作",
+    PrestigeTier.GOLD: "かなり良い",
+    PrestigeTier.SILVER: "良い",
+    PrestigeTier.BRONZE: "まずまず",
+    PrestigeTier.COAL: "いまひとつ",
+    PrestigeTier.TRASH: "合わなかった",
+}
 
 
 def get_all_tags(db: Session) -> list[TagResponse]:
-    """
-    Return all available tags as TagResponse objects.
-
-    Used by GET /tags so the frontend can display the full list of
-    mood/quality labels before the user creates a viewing history entry.
-
-    Args:
-        db (Session): SQLAlchemy database session, injected by FastAPI.
-
-    Returns:
-        list[TagResponse]: All tags ordered by id.
-    """
     tags = viewing_history_repository.get_all_tags(db)
-    return [TagResponse.model_validate(tag) for tag in tags]
+    return [
+        TagResponse(
+            id=tag.id,
+            key=tag.key,
+            name=tag.display_name_ja,
+            description=tag.description_ja,
+        )
+        for tag in tags
+    ]
 
 
-async def create_entry(
+def create_entry(
     db: Session, user: User, payload: ViewingHistoryEntryCreate
 ) -> ViewingHistoryEntryResponse:
-    """
-    Log a new film in the user's viewing history.
+    film = None
+    if payload.film_id is not None:
+        film = film_catalog_repository.get_by_id(db, payload.film_id)
+    elif payload.tmdb_id is not None:
+        film = film_catalog_repository.get_by_tmdb_id(db, payload.tmdb_id)
+    if film is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="指定された映画はローカルカタログにありません。",
+        )
 
-    Validates the film with TMDB, resolves tag IDs to Tag instances, and
-    delegates persistence to the repository. Film metadata is included in the
-    response but is never stored in the application database.
+    if viewing_history_repository.get_by_user_and_film(db, user.id, film.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="この映画はすでに視聴記録へ追加されています。",
+        )
 
-    Args:
-        db (Session): SQLAlchemy database session, injected by FastAPI.
-        user (User): The authenticated user, injected by get_current_user.
-        payload (ViewingHistoryEntryCreate): Validated creation data
-            containing tmdb_id, tag_ids, prestige_tier, and personal_note.
-
-    Returns:
-        ViewingHistoryEntryResponse: The created entry with all fields
-            populated, including title, poster_url, and resolved tags.
-
-    Raises:
-        httpx.HTTPStatusError: If TMDB returns a non-2xx response.
-        httpx.RequestError: If the TMDB request cannot be sent.
-    """
-    film_data = await tmdb_client.get_movie_basic(payload.tmdb_id)
     tags = viewing_history_repository.get_tags_by_ids(db, payload.tag_ids)
+    if len(tags) != len(set(payload.tag_ids)):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="選択されたタグの一部が見つかりません。",
+        )
+
     entry = ViewingHistoryEntry(
         user_id=user.id,
-        tmdb_id=payload.tmdb_id,
+        film_id=film.id,
+        tmdb_id=film.tmdb_id,
         tags=tags,
         prestige_tier=payload.prestige_tier,
-        personal_note=payload.personal_note
+        personal_note=payload.personal_note,
     )
     created = viewing_history_repository.create(db, entry)
-    return _entry_response(created, film_data)
+    return _entry_response(created)
 
 
-async def get_history(
+def get_history(
     db: Session, user: User
 ) -> list[ViewingHistoryEntryResponse]:
-    """
-    Retrieve the full viewing history of the authenticated user.
-
-    Args:
-        db (Session): SQLAlchemy database session, injected by FastAPI.
-        user (User): The authenticated user, injected by get_current_user.
-
-    Returns:
-        list[ViewingHistoryEntryResponse]: All viewing history entries,
-            enriched concurrently with current TMDB title and poster data.
-            If an individual lookup fails, that entry is retained with null
-            display metadata. Returns an empty list if none exist.
-    """
-    entries = viewing_history_repository.get_by_user(db, user.id)
-    return await asyncio.gather(*(_enrich_entry(entry) for entry in entries))
-
-
-async def _enrich_entry(
-    entry: ViewingHistoryEntry,
-) -> ViewingHistoryEntryResponse:
-    """Resolve display metadata for one entry without affecting persistence."""
-    try:
-        film_data = await tmdb_client.get_movie_basic(entry.tmdb_id)
-    except httpx.HTTPError:
-        film_data = None
-    return _entry_response(entry, film_data)
+    return [
+        _entry_response(entry)
+        for entry in viewing_history_repository.get_by_user(db, user.id)
+    ]
 
 
 def _entry_response(
     entry: ViewingHistoryEntry,
-    film_data: dict | None,
 ) -> ViewingHistoryEntryResponse:
-    """Build an API response from persisted reactions and transient metadata."""
-    response = ViewingHistoryEntryResponse.model_validate(entry)
-    if not film_data:
-        return response
-
-    poster_path = film_data.get("poster_path")
-    return response.model_copy(update={
-        "title": film_data.get("title"),
-        "poster_url": _POSTER_BASE_URL + poster_path if poster_path else None,
-    })
+    film = entry.film
+    return ViewingHistoryEntryResponse(
+        id=entry.id,
+        film_id=entry.film_id,
+        tmdb_id=entry.tmdb_id,
+        title=film.title_ja or "日本語タイトル情報はありません",
+        poster_url=film.poster_path,
+        tags=[
+            TagResponse(
+                id=tag.id,
+                key=tag.key,
+                name=tag.display_name_ja,
+                description=tag.description_ja,
+            )
+            for tag in entry.tags
+        ],
+        prestige_tier=entry.prestige_tier,
+        prestige_tier_label=(
+            PRESTIGE_LABELS[entry.prestige_tier]
+            if entry.prestige_tier
+            else None
+        ),
+        personal_note=entry.personal_note,
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+    )
 
 
 def remove_entry(
-    db: Session, user: User, tmdb_id: int
+    db: Session, user: User, film_id: int
 ) -> None:
-    """
-    Remove a film from the user's viewing history.
-
-    Delegates deletion to the repository. Raises 404 if the user has
-    no entry for the given film, so the error propagates directly to
-    the FastAPI route without any additional handling.
-
-    Args:
-        db (Session): SQLAlchemy database session, injected by FastAPI.
-        user (User): The authenticated user, injected by get_current_user.
-        tmdb_id (int): TMDB identifier of the film to remove.
-
-    Raises:
-        HTTPException 404: If the user has no history entry for this film.
-    """
-    removed = viewing_history_repository.remove(db, user.id, tmdb_id)
-
-    if not removed:
+    if not viewing_history_repository.remove_by_film(db, user.id, film_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No history entry found for this film."
+            detail="この映画の視聴記録は見つかりません。",
+        )
+
+
+def remove_entry_by_tmdb(
+    db: Session, user: User, tmdb_id: int
+) -> None:
+    """Compatibility path for records created by older clients."""
+    if not viewing_history_repository.remove(db, user.id, tmdb_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="この外部IDに対応する視聴記録は見つかりません。",
         )

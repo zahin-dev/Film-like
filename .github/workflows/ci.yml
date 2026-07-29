@@ -13,15 +13,32 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend tests
+    name: バックエンド・マイグレーション・監査
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: filmlike
+          POSTGRES_PASSWORD: filmlike
+          POSTGRES_DB: filmlike_migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U filmlike -d filmlike_migration_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
     env:
       DATABASE_URL: "sqlite:///:memory:"
-      SECRET_KEY: "film-like-ci-secret-key"
-      TMDB_READ_ACCESS_TOKEN: "film-like-ci-tmdb-token"
+      SECRET_KEY: "film-like-ci-local-secret"
+      RECOMMENDATION_ENGINE: "local"
+      APP_LOCALE: "ja-JP"
+      APP_REGION: "JP"
+      APP_TIMEZONE: "Asia/Tokyo"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,11 +48,24 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements.txt
-      - run: python ../scripts/check_english_public_text.py
+      - run: python ../scripts/check_japanese_public_text.py
+      - run: python ../scripts/check_offline_dependencies.py
       - run: python -m pytest -q
+      - run: python -m pytest --cov=app
+      - name: 既存tmdb_idの移行とロールバックを検証
+        env:
+          MIGRATION_TEST_DATABASE_URL: "postgresql://filmlike:filmlike@localhost:5432/filmlike_migration_test"
+          ALLOW_DESTRUCTIVE_MIGRATION_TEST: "1"
+        run: python scripts/verify_migrations.py
+      - name: シードをPostgreSQLへ投入
+        env:
+          DATABASE_URL: "postgresql://filmlike:filmlike@localhost:5432/filmlike_migration_test"
+        run: |
+          python seeds/seed_tag.py
+          python seeds/seed_film.py
 
   frontend:
-    name: Frontend lint and build
+    name: フロントエンド・日本語UI
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -48,5 +78,6 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm run test
       - run: npm run lint
       - run: npm run build

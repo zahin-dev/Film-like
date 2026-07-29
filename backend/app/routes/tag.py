@@ -16,10 +16,16 @@ from app.database import get_db
 from app.schemas.viewing_history import TagResponse
 from app.services import viewing_history_service
 
-router = APIRouter(prefix="/tags", tags=["tags"])
+router = APIRouter(prefix="/tags", tags=["タグ"])
 
 
-@router.get("", response_model=list[TagResponse], status_code=status.HTTP_200_OK)
+@router.get(
+    "",
+    response_model=list[TagResponse],
+    status_code=status.HTTP_200_OK,
+    summary="タグ一覧を取得",
+    description="安定した内部キー、日本語表示名、日本語説明を返します。",
+)
 def get_tags(db: Session = Depends(get_db)):
     """
     Return all available mood/quality tags.

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/authStore'
 import api from '../../services/api'
 import { getApiError } from '../../utils/apiError'
+import usePageTitle from '../../utils/usePageTitle'
 
 function AuthPage() {
   const [mode, setMode] = useState('login')
@@ -18,6 +19,8 @@ function AuthPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { login } = useAuth()
+  const isLogin = mode === 'login'
+  usePageTitle(isLogin ? 'ログイン' : '新規登録')
 
   function updateField(event) {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
@@ -41,7 +44,7 @@ function AuthPage() {
       const destination = location.state?.from?.pathname || '/dashboard'
       navigate(destination, { replace: true })
     } catch (requestError) {
-      setError(getApiError(requestError, 'Authentication failed.'))
+      setError(getApiError(requestError, '認証に失敗しました。'))
     } finally {
       setSubmitting(false)
     }
@@ -52,8 +55,6 @@ function AuthPage() {
     setError('')
   }
 
-  const isLogin = mode === 'login'
-
   return (
     <main className="auth-page">
       <section className="auth-story" aria-labelledby="brand-heading">
@@ -61,38 +62,38 @@ function AuthPage() {
           <span className="brand-mark large" aria-hidden="true">F</span>
           <span>Film-like</span>
         </div>
-        <p className="eyebrow light">Your taste, in motion</p>
-        <h1 id="brand-heading">A film diary that understands the mood you are in.</h1>
+        <p className="eyebrow light">映画の記憶を、自分の言葉で</p>
+        <h1 id="brand-heading">今の気分と、これまで観た映画をつなぐ映画日記。</h1>
         <p>
-          Search the TMDB catalog, keep a personal viewing history, and turn
-          your reactions into verified recommendations powered by Mistral AI.
+          日本語のローカルカタログから映画を探し、感想を記録できます。
+          おすすめは外部AIを使わず、この端末のデータだけで選びます。
         </p>
-        <div className="auth-proof" aria-label="Product features">
-          <span>Personal diary</span>
-          <span>Mood-led discovery</span>
-          <span>TMDB verified</span>
+        <div className="auth-proof" aria-label="主な機能">
+          <span>自分だけの映画日記</span>
+          <span>気分から作品を発見</span>
+          <span>APIキー不要</span>
         </div>
       </section>
 
       <section className="auth-form-panel" aria-labelledby="auth-heading">
         <div className="auth-form-wrap">
-          <p className="eyebrow">{isLogin ? 'Welcome back' : 'Start your diary'}</p>
-          <h2 id="auth-heading">{isLogin ? 'Sign in to Film-like' : 'Create your account'}</h2>
+          <p className="eyebrow">{isLogin ? 'おかえりなさい' : '映画日記を始める'}</p>
+          <h2 id="auth-heading">{isLogin ? 'Film-likeにログイン' : 'アカウントを作成'}</h2>
           <p className="muted">
             {isLogin
-              ? 'Continue where your last film left off.'
-              : 'A few details, then your next great film.'}
+              ? '前回の続きから、映画の記録を振り返りましょう。'
+              : '必要な情報を入力して、最初の一本を記録しましょう。'}
           </p>
 
           <form className="form-stack" onSubmit={handleSubmit}>
             {!isLogin && (
               <div className="form-grid two-column">
                 <label>
-                  First name
+                  名
                   <input name="firstName" value={form.firstName} onChange={updateField} autoComplete="given-name" required />
                 </label>
                 <label>
-                  Last name
+                  姓
                   <input name="lastName" value={form.lastName} onChange={updateField} autoComplete="family-name" required />
                 </label>
               </div>
@@ -100,33 +101,33 @@ function AuthPage() {
 
             {!isLogin && (
               <label>
-                Age <span className="optional">Optional</span>
-                <input name="age" type="number" min="1" max="120" value={form.age} onChange={updateField} inputMode="numeric" />
+                年齢 <span className="optional">任意</span>
+                <input name="age" type="number" min="1" max="120" value={form.age} onChange={updateField} inputMode="numeric" placeholder="例：25" />
               </label>
             )}
 
             <label>
-              Email address
-              <input name="email" type="email" value={form.email} onChange={updateField} autoComplete="email" required />
+              メールアドレス
+              <input name="email" type="email" value={form.email} onChange={updateField} autoComplete="email" placeholder="you@example.com" required />
             </label>
 
             <label>
-              Password
+              パスワード
               <input name="password" type="password" minLength="8" maxLength="64" value={form.password} onChange={updateField} autoComplete={isLogin ? 'current-password' : 'new-password'} required />
-              {!isLogin && <span className="field-hint">8–64 characters with a number and symbol.</span>}
+              {!isLogin && <span className="field-hint">8〜64文字で、数字と記号を1文字以上含めてください。</span>}
             </label>
 
             {error && <p className="inline-alert" role="alert">{error}</p>}
 
             <button className="button primary full" type="submit" disabled={submitting}>
-              {submitting ? 'Please wait…' : isLogin ? 'Sign in' : 'Create account'}
+              {submitting ? '処理中です…' : isLogin ? 'ログイン' : 'アカウントを作成'}
             </button>
           </form>
 
           <p className="auth-switch">
-            {isLogin ? 'New to Film-like?' : 'Already have an account?'}{' '}
+            {isLogin ? '初めて利用しますか？' : 'すでにアカウントをお持ちですか？'}{' '}
             <button type="button" className="text-button" onClick={toggleMode}>
-              {isLogin ? 'Create one' : 'Sign in'}
+              {isLogin ? '新規登録' : 'ログイン'}
             </button>
           </p>
         </div>

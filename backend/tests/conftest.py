@@ -1,58 +1,71 @@
-"""
-Test configuration and shared fixtures for Film-like backend tests.
-
-Uses an in-memory SQLite database to isolate tests from the production
-PostgreSQL database. Each test gets a fresh database and a clean
-FastAPI client — no test can pollute another.
-
-Fixtures:
-    - db_session: a SQLAlchemy session connected to the in-memory SQLite DB
-    - client: a FastAPI TestClient with get_db overridden to use db_session
-"""
+"""Shared isolated fixtures for the local-only backend test suite."""
 
 import os
+from pathlib import Path
+import socket
 
-# Configure deterministic test-only settings before importing the application.
-# Production continues to require its own environment configuration.
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "film-like-test-secret-key")
-os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-tmdb-access-token")
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from app.main import app
+
 from app.database import Base, get_db
+from app.importing import import_catalog_files
+from app.main import app
+from app.models.film_catalog import FilmCatalog
+from app.models.tag import Tag
+from seeds.seed_tag import TAGS
 
-SQLITE_URL = "sqlite:///:memory:"
 
-# StaticPool forces SQLAlchemy to reuse a single connection for the
-# in-memory database. Without it, create_all and the session get
-# separate connections, each seeing an empty DB.
 engine = create_engine(
-    SQLITE_URL,
+    "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
-    poolclass=StaticPool
+    poolclass=StaticPool,
+)
+TestingSessionLocal = sessionmaker(
+    autocommit=False, autoflush=False, bind=engine
 )
 
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+@pytest.fixture(autouse=True)
+def block_external_network(monkeypatch):
+    """Fail immediately if application code attempts a real network socket."""
+
+    def denied(*args, **kwargs):
+        raise AssertionError("テスト中の外部ネットワーク接続は禁止されています")
+
+    monkeypatch.setattr(socket, "create_connection", denied)
+
+
+def _seed(db) -> None:
+    for key, legacy_name, description_ja, display_name_ja in TAGS:
+        db.add(
+            Tag(
+                key=key,
+                name=legacy_name,
+                description=description_ja,
+                display_name_ja=display_name_ja,
+                description_ja=description_ja,
+            )
+        )
+    db.commit()
+    data_dir = Path(__file__).resolve().parents[1] / "data"
+    import_catalog_files(
+        db,
+        data_dir / "demo_source.json",
+        data_dir / "demo_films.json",
+    )
 
 
 @pytest.fixture()
 def db_session():
-    """
-    Provide a clean SQLite in-memory session for a single test.
-
-    Creates all tables before the test runs and drops them afterwards,
-    ensuring complete isolation between tests.
-
-    Yields:
-        Session: A SQLAlchemy session bound to the in-memory SQLite database.
-    """
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
+    _seed(db)
     try:
         yield db
     finally:
@@ -62,21 +75,6 @@ def db_session():
 
 @pytest.fixture()
 def client(db_session):
-    """
-    Provide a FastAPI TestClient using the test database session.
-
-    Overrides the get_db dependency so every request made through this
-    client uses the SQLite session instead of the production PostgreSQL
-    session. The override is cleared after the test to avoid leaking
-    state between tests.
-
-    Args:
-        db_session: The in-memory SQLite session provided by the
-            db_session fixture.
-
-    Yields:
-        TestClient: A configured FastAPI test client.
-    """
     def override_get_db():
         yield db_session
 
@@ -84,3 +82,23 @@ def client(db_session):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def auth_headers(client):
+    payload = {
+        "first_name": "花子",
+        "last_name": "映画",
+        "email": "hanako@example.com",
+        "password": "Films123!",
+    }
+    response = client.post("/auth/register", json=payload)
+    assert response.status_code == 201
+    return {"Authorization": f"Bearer {response.json()['token']}"}
+
+
+@pytest.fixture()
+def demo_films(db_session):
+    return db_session.execute(
+        select(FilmCatalog).order_by(FilmCatalog.id)
+    ).scalars().all()

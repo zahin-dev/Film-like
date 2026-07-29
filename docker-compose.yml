@@ -1,18 +1,65 @@
 services:
   db:
     image: postgres:16
-    container_name: cinemood_db
     environment:
       POSTGRES_USER: cinemood
       POSTGRES_PASSWORD: cinemood
       POSTGRES_DB: cinemood
+      TZ: Asia/Tokyo
+      PGTZ: Asia/Tokyo
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U cinemood -d cinemood"]
       interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql://cinemood:cinemood@db:5432/cinemood
+      SECRET_KEY: ${SECRET_KEY:-film-like-local-development-secret-change-me}
+      RECOMMENDATION_ENGINE: local
+      APP_LOCALE: ja-JP
+      APP_REGION: JP
+      APP_TIMEZONE: Asia/Tokyo
+      TZ: Asia/Tokyo
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data/posters:/app/data/posters:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s

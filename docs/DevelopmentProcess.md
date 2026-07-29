@@ -1,65 +1,44 @@
-# Film-like Development Process Retrospective
+# 開発プロセス
 
-This document explains how the current repository relates to the development-history claims in the submitted Japanese entry sheet (ES). It is a retrospective written after the work; it is not an original timestamped project artifact. It does not create evidence for dates, collaborators, contribution percentages, issues, pull requests, or process records that were not retained.
+## プロジェクトの位置づけ
 
-## Original Project Context
+Film-likeは3名のチームで共同開発・保守しています。リポジトリが`zahin-dev`アカウント配下にあることは管理上の連絡先を示すだけで、単独所有や全ファイルの単独執筆を示しません。
 
-The following statements are self-reported retrospective facts from the repository owner:
+自己申告された開発背景は次のとおりです。
 
-- The original Film-like project was developed over approximately three months by a three-person team.
-- The team used GitHub-based iterative development.
-- The repository owner led backend design and implementation.
-- Pair programming was used when work stalled, and the team adjusted its process to resolve blockers and improve progress.
+- 初期MVPは約3か月で開発した。
+- GitHubのブランチとレビューを使って反復した。
+- 行き詰まった箇所ではペア作業や役割横断の調査を行った。
+- バックエンド、フロントエンド、インフラに主担当を置いた。
+- 主担当は排他的な境界ではなく、全員がテスト、レビュー、デバッグ、設計、文書化に参加した。
 
-No collaborator names or contribution percentages are asserted here. The current checkout also cannot establish that every present-day file existed or was complete during that original three-month period.
+この文書は履歴に存在しないPR番号、作業時間、貢献割合を作りません。Git履歴だけで確認できない過去の出来事は、自己申告の背景として区別します。
 
-## Evidence Classification
+## 現在の主担当
 
-### Repository-verifiable facts
+- バックエンド: `zahin-dev`
+- フロントエンド: `aoi-dev`
+- インフラ: `sakamoto-dev`
 
-The current source tree and Git history can be inspected directly to verify:
+詳細は[Ownership.md](Ownership.md)を参照してください。
 
-- a Python 3.12/FastAPI backend with Pydantic schemas, SQLAlchemy repositories, Alembic migrations, and PostgreSQL configuration;
-- a React frontend with authenticated diary, film-catalog, film-detail, recommendation, and diary-insight interfaces;
-- separate route, service, repository, and external-client boundaries;
-- TMDB-based film identity and metadata resolution, with only `tmdb_id` stored locally for film identity;
-- request-time recommendation context built from current mood and stored viewing tags;
-- strict Mistral JSON Schema requests, Pydantic validation, candidate filtering, at most one retry, TMDB resolution, and controlled error responses;
-- automated backend tests, frontend lint/build scripts, GitHub Actions configuration, Docker Compose configuration, and English public-text audit tooling; and
-- incremental commits in the retained Git history.
+## 日本語・ローカル完結版の進め方
 
-Repository-verifiable means that a reviewer can reproduce or inspect the fact in this checkout. It does not show when every line was originally written or who wrote every line.
+1. 修正前の外部API、環境変数、DB、英語表示、地域設定、テスト、CI、文書を調査。
+2. 調査結果を[JapaneseOfflineMigrationPlan.md](JapaneseOfflineMigrationPlan.md)へ記録。
+3. 旧`tmdb_id`を保持したままローカル映画IDへ移行。
+4. 特定映画APIに依存しないプロバイダー境界を追加。
+5. 推薦を決定的なローカル点数方式へ変更。
+6. 全主要画面、APIメッセージ、Swagger、タグ、説明を日本語化。
+7. Docker、CI、監査、インポート、担当者文書を実装に合わせて更新。
+8. テスト、カバレッジ、Lint、Production build、Composeを実行。
 
-### Self-reported retrospective facts
+## レビュー時の確認
 
-The team size, approximate duration, backend leadership, original GitHub workflow, use of pull requests, pair-programming sessions, blocker-resolution discussions, and July 15, 2026 manual live-verification result are retrospective statements from the repository owner. Unless separately supported by retained timestamped artifacts, this repository alone does not independently prove each event.
-
-## Scope Separation
-
-### Original team MVP period
-
-The original three-person, approximately three-month period established the project direction and team MVP work. The owner reports leading the backend design and implementation during this period. The repository does not preserve a reliable file-by-file boundary for that historical snapshot, so current files must not all be attributed to the original period.
-
-### Later individual completion and hardening
-
-The current repository contains later individual work after the original team period. That later work includes frontend completion, Mistral integration hardening, expanded automated tests, GitHub Actions CI, manual live verification, diary reaction insights, reproducible metrics and audits, and documentation alignment.
-
-The present application is therefore evidence of the combined project history: original team MVP work followed by later individual completion, testing, frontend completion, AI hardening, CI, live verification, and documentation. It remains an MVP and is not described as production-ready.
-
-## Engineering Practices
-
-### Layered implementation
-
-FastAPI routes handle HTTP concerns and authentication dependencies. Services coordinate application behavior. Repositories isolate database access. External clients isolate TMDB and Mistral HTTP communication. The Recommendation Facade composes these boundaries while treating AI output as untrusted.
-
-### Incremental GitHub workflow
-
-The retained history shows incremental commits. The owner retrospectively reports that the original team used GitHub branches and pull requests for iterative development. The current checkout does not independently reconstruct every historical pull request, review, or issue, so no missing identifiers or counts are invented.
-
-### Tests and CI
-
-The backend suite uses isolated test configuration and mocks external TMDB and Mistral calls. GitHub Actions runs the English public-text audit, backend tests, frontend dependency installation, lint, and production build. These checks verify current contracts; they do not prove current availability of external services.
-
-### Pair programming and blocker resolution
-
-The owner retrospectively reports that pair programming and process changes were used when work stalled. This document records that statement as retrospective context, not as a timestamped KPT record, screenshot, or activity metric.
+- 主要機能に外向きHTTP通信が追加されていないか。
+- 新しい環境変数がクラウドAPIキーを要求していないか。
+- DB変更に既存ユーザーの移行経路があるか。
+- 日本語の欠損表示を迂回して英語説明を表示していないか。
+- 配信情報に更新日がないのに「最新」と表現していないか。
+- インポートデータの出典と権利条件が記録されているか。
+- 主担当表示を単独作者の断定にしていないか。

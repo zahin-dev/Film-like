@@ -17,7 +17,7 @@ const App = () => {
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/catalog" element={<CatalogPage />} />
-            <Route path="/films/:tmdbId" element={<FilmDetailPage />} />
+            <Route path="/films/:filmId" element={<FilmDetailPage />} />
             <Route path="/recommendations" element={<RecommendationPage />} />
             <Route path="/profile" element={<ProfilePage />} />
           </Route>

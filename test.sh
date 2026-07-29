@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
-# Run the Film-like backend test suite with coverage
-
-# Stop the script if a command fails
+# バックエンド、監査、フロントエンドをまとめて検証
 set -e
 
-echo "=== Film-like Tests ==="
+echo "バックエンドテストを実行します。"
+(
+    cd backend
+    python -m pytest -q
+    python -m pytest --cov=app
+)
 
-# Check that the virtual environment exists
-if [ ! -f "backend/venv/bin/activate" ]; then
-    echo "Error: virtual environment not found."
-    echo "Run this command first to initialize the project:"
-    echo "    ./setup.sh"
-    exit 1
-fi
+echo "日本語表示とローカル完結構成を監査します。"
+python scripts/check_japanese_public_text.py
+python scripts/check_offline_dependencies.py
 
-# Run pytest with coverage from the backend directory
-echo "Running tests..."
-cd backend
-source venv/bin/activate
-pytest tests/ -v --cov=app --cov-report=term-missing
+echo "フロントエンドを検証します。"
+(
+    cd frontend
+    npm ci
+    npm run test
+    npm run lint
+    npm run build
+)

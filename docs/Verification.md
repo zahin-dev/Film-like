@@ -1,148 +1,155 @@
-# Film-like Verification Evidence
+# 検証記録
 
-This document records verification of the current MVP checkout. Automated tests use mocks for TMDB and Mistral and do not make live requests. Passing results verify current application contracts, not permanent external-service availability or production readiness.
+検証日: 2026-07-26
+ブランチ: `feat/japanese-offline-version`
+環境: Windows、Python 3.12.13、Node.js 20系、Docker Desktop
 
-## Automated Verification
+## 確認できた結果
 
-The commands below were run on July 16, 2026 with Python 3.12.13 from the supported local virtual environment.
-
-### Backend tests
-
-```powershell
-cd backend
-..\backend\venv\Scripts\python.exe -m pytest -q
-```
-
-Result: `102 passed in 40.05s`.
-
-### Backend coverage
+### バックエンド
 
 ```powershell
 cd backend
-..\backend\venv\Scripts\python.exe -m pytest --cov=app --cov-report=term-missing
+.\venv\Scripts\python.exe -m pytest -q
 ```
 
-Result: `102 passed in 41.36s`; total application coverage was `90%` (`689` statements, `67` missed). The diary-insight route, schema, and service each measured `100%` statement coverage.
+結果:
 
-### Application import without Mistral configuration
+```text
+38 passed
+```
 
-The process was given deterministic non-secret database/auth/TMDB test settings, `MISTRAL_API_KEY` was removed only from that child process, and the application was imported without reading or printing any local secret value.
+外部ソケット接続を禁止する自動フィクスチャの下で実行しています。対象には次を含みます。
 
-Result: `Film-like API: import ok without MISTRAL_API_KEY`.
-
-### Alembic single-head check
+- APIキーなしの起動
+- 日本語OpenAPIメタデータ
+- 日本語タイトル、原題、読み別名による検索
+- 日本語タイトル優先と日本語の欠損表示
+- 日本語タグ、認証・404・409・422エラー
+- ローカル`film_id`による視聴記録
+- 旧`tmdb_id`入力からローカル映画への照合
+- 評価、タグ、メモ、日時の保持
+- 視聴済み映画と重複の推薦除外
+- 気分、履歴タグ、最近のジャンルの反映
+- 日本語の推薦理由
+- 同じ入力に対する決定的な推薦順
+- 候補不足と候補なしの制御
+- 出典マニフェスト付きローカルインポート
+- 外部ポスターURLの拒否
+- 旧照合用映画を補完するときのローカルID保持
 
 ```powershell
-cd backend
-..\backend\venv\Scripts\python.exe -m alembic heads
+.\venv\Scripts\python.exe -m pytest --cov=app --cov-report=term
 ```
 
-Result: one head, `b3d91f6a2c04 (head)`.
+結果:
 
-### Frontend clean install
+```text
+38 passed
+TOTAL 822 statements, 51 missing, 94%
+```
+
+### フロントエンド
 
 ```powershell
 cd frontend
 npm ci
-```
-
-Result after the advisory remediation: `180` packages added and `181` packages audited from the committed lockfile; npm reported `0 vulnerabilities`.
-
-### Frontend dependency audits
-
-```powershell
-cd frontend
-npm audit
-npm audit --omit=dev
-```
-
-Result: both the complete dependency audit and the production-only audit reported `0 vulnerabilities`. The lockfile refresh moved the production transitive dependency `form-data` from 4.0.5 to 4.0.6 and the development dependency Vite from 8.0.14 to 8.1.5 within the existing declared semver ranges. No dependency override, forced update, major-version change, or new direct package was added.
-
-### Frontend lint
-
-```powershell
-cd frontend
+npm run test
 npm run lint
-```
-
-Result: ESLint exited `0` with no reported violations.
-
-### Frontend production build
-
-```powershell
-cd frontend
 npm run build
 ```
 
-Result: Vite 8.1.5 transformed `91` modules and completed successfully in `366ms`. Output sizes were `0.45 kB` HTML (`0.29 kB` gzip), `26.24 kB` CSS (`6.55 kB` gzip), and `303.82 kB` JavaScript (`97.33 kB` gzip). The generated `frontend/dist` directory remains ignored and untracked.
+結果:
 
-### Docker Compose validation
+- `npm ci`: 成功、180パッケージをクリーンインストール
+- 日本語UI契約テスト: 成功
+- ESLint: 成功、エラーなし
+- Vite Production build: 成功、92モジュールを変換
+- 生成JavaScript: 約307.81 kB、gzip約99.02 kB
+
+静的UI契約は`lang="ja"`、日本語ローディング・空状態・エラー、`ja-JP`と`Asia/Tokyo`、日本語検索、ローカルID送信、日本語アクセシビリティラベル、推薦画面に旧クラウドサービス文言がないことを確認します。
+
+### 公開文と外部依存の監査
 
 ```powershell
-docker compose config
+python scripts/check_japanese_public_text.py
+python scripts/check_offline_dependencies.py
 ```
 
-Result: exit `0`; the resolved configuration retained the `postgres_data` named volume and included the PostgreSQL `pg_isready` healthcheck. The sandbox printed a warning that it could not read the user's Docker client configuration, but Compose still rendered and validated this project configuration. No container or volume was created, recreated, or deleted.
+結果:
 
-This Compose file is a reproducible PostgreSQL 16 development environment, not production configuration.
+```text
+日本語公開文監査に合格しました。
+ローカル完結構成の監査に合格しました。クラウドAPIキーは不要です。
+```
 
-### Git and repository hygiene
+外部依存監査は、実行時設定、`.env.example`、Compose、CI、`backend/app`を対象に、クラウドAPIキー名、既知のクラウド接続先、外部HTTPクライアント、外部アダプター、Dockerイメージへの`.env`混入を検査します。
+
+### Docker Compose構文
+
+```powershell
+docker compose config --quiet
+```
+
+結果: 成功。
+
+PostgreSQL、バックエンド、フロントエンド、`ja-JP`、`JP`、`Asia/Tokyo`、ヘルスチェック、既存`cinemood`ボリュームとの接続互換が解決されました。
+
+Dockerクライアントのユーザー設定ファイルについてアクセス警告が出ましたが、Compose定義の構文検証は終了コード0です。
+
+### 差分整合性
 
 ```powershell
 git diff --check
 ```
 
-Result: no whitespace errors. Git printed only working-copy LF-to-CRLF notices on this Windows checkout.
+結果: 空白エラーなし。WindowsのGit設定によるLFからCRLFへの変換予告だけが表示されました。
 
-The tracked-environment-file scan found no committed local `.env` file. The tracked-secret signature scan found no private-key, common token-prefix, or non-placeholder key assignment. The tracked generated-artifact scan found no `node_modules`, `__pycache__`, coverage, build, or distribution output. Scans report file/line locations only and do not print credential values.
+## 環境側の理由で完了していない確認
 
-### English public-text audit
+### `docker compose up -d`
 
-```powershell
-python scripts/check_english_public_text.py
-```
-
-Result: no Hiragana, Katakana, or CJK characters were found in public Markdown documentation or in backend/frontend source comments and docstrings. The script prints the exact file and line and exits non-zero if it finds a violation. It does not inspect environment files, dependency trees, generated output, identifiers, URLs, database contents, or user-entered data.
-
-### Reproducible project metrics
+次を実行しました。
 
 ```powershell
-python scripts/project_metrics.py
+docker compose up -d --build
+docker compose up -d
 ```
 
-Physical UTF-8 lines include blank and comment-only lines. Counts exclude virtual environments, dependency trees, caches, coverage output, and build output.
+どちらもアプリケーションコードへ到達する前にDocker Engineで停止しました。
 
-| Scope | Files | Physical lines |
-|---|---:|---:|
-| `backend/app` Python | 35 | 2,430 |
-| `backend/tests` Python | 6 | 1,470 |
-| Migration Python | 5 | 217 |
-| Total backend Python | 48 | 4,429 |
-| `frontend/src` text source | 20 | 2,779 |
+確認できたDocker Desktopログ:
 
-The total backend category also includes Alembic support and seed Python files. These are current-checkout measurements and must not be treated as the line count of the original three-month team-period snapshot.
+```text
+preparing environment: provisioning data: detecting disk:
+no sd* disk in /sys/block with wwid ending by ...: file does not exist
+```
 
-## Manual Live End-to-End Verification
+Docker専用WSL2ディストリビューションは`Running`でしたが、Engineの`_ping`がタイムアウトし、Composeは500またはタイムアウトになりました。Docker Desktop起動、Engine再確認、`docker-desktop`ディストリビューションの再起動まで試しましたが復旧しませんでした。
 
-The repository owner self-reports that manual live end-to-end verification was completed on July 15, 2026. This was manual verification, not an automated test run or a repository-verifiable timestamped artifact. It covered:
+Docker Desktopのデータディスクを初期化すれば復旧する可能性がありますが、既存イメージ、コンテナ、ボリュームを失うおそれがあるため実行していません。したがって、この環境では次は未確認です。
 
-- account registration;
-- login;
-- TMDB search;
-- film-detail display;
-- viewing-history persistence;
-- diary display;
-- mood selection;
-- live Mistral recommendation;
-- historical viewing tags used as recommendation context; and
-- TMDB-resolved recommendation results.
+- コンテナイメージの実ビルド
+- PostgreSQL上のAlembic実行
+- Composeサービスのヘルス状態
+- コンテナ経由のエンドツーエンド操作
 
-This record does not include or commit keys, tokens, screenshots, response bodies, or fabricated metrics. External TMDB and Mistral availability, credentials, model behavior, and recommendation quality can change after the recorded verification.
+CIには専用PostgreSQLサービスと`backend/scripts/verify_migrations.py`を追加しています。このスクリプトは旧`tmdb_id`履歴を作成し、アップグレード後に`film_id`、評価、メモ、旧IDが保持されること、ダウングレード後にも旧データが保持されることを検証します。ローカルDocker Engineが復旧するまで、PostgreSQL上での実行結果は未確認です。
 
-## Remaining Boundaries
+### ブラウザ画像確認
 
-- Film-like remains an MVP and is not production-ready.
-- Malformed Mistral output remains possible; strict schema requests, Pydantic validation, filtering, at most one retry, and controlled errors prevent malformed candidates from being displayed as recommendations.
-- Automated tests mock external services and therefore do not prove live availability.
-- Diary insights aggregate user-selected reaction tags. They are not clinical emotion analysis, sentiment inference, personality analysis, or mental-health analysis.
-- The retrospective development-history statements are classified separately in [DevelopmentProcess.md](DevelopmentProcess.md).
+ViteのProduction previewは起動できましたが、アプリ内ブラウザ接続基盤がWindowsの`AppData`読み取り権限で停止しました。このため実画面キャプチャによる文字切れ確認は未完了です。
+
+CSSには日本語システムフォント、禁則処理、折返しを設定し、UI契約テスト、Lint、Production buildは成功しています。実ブラウザでのデスクトップ・モバイル目視確認は残っています。
+
+## 再確認手順
+
+Docker Desktopのデータディスクを既存データを保護した方法で修復したあと、次を実行します。
+
+```powershell
+docker compose up -d --build
+docker compose ps
+docker compose logs backend
+```
+
+バックエンドがhealthyになったら、`http://localhost:8000/docs`と`http://localhost:5173`を開き、登録、検索、詳細、記録、分析、推薦、削除を確認します。

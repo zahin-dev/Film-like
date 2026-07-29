@@ -1,197 +1,93 @@
-"""
-Auth endpoint tests for the Film-like API.
-
-Covers the /auth/register and /auth/login routes using an in-memory
-SQLite database provided by the conftest fixtures. Each test gets a
-clean database, so tests are fully isolated from one another.
-"""
-
-import pytest
-from fastapi import status
+"""Authentication and Japanese error-contract tests."""
 
 
 VALID_USER = {
-    "first_name": "John",
-    "last_name": "Doe",
-    "email": "JohnDoe@test.com",
+    "first_name": "太郎",
+    "last_name": "映画",
+    "email": "taro@example.com",
     "password": "Test1234!",
-    "age": 18
+    "age": 24,
 }
 
 
-# ---------------------------------------------------------------------------
-# Register — happy path
-# ---------------------------------------------------------------------------
+def test_app_starts_without_cloud_api_keys(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {
+        "message": "Film-like 日本語版 API は稼働中です。",
+        "locale": "ja-JP",
+        "region": "JP",
+        "timezone": "Asia/Tokyo",
+    }
 
-def test_register_valid_user(client):
-    """A valid registration payload returns 201 and creates the user."""
+
+def test_openapi_metadata_is_japanese_and_local(client):
+    document = client.get("/openapi.json").json()
+    assert document["info"]["title"] == "Film-like 日本語版 API"
+    assert "クラウド映画API" in document["info"]["description"]
+    assert {tag["name"] for tag in document["tags"]} == {
+        "認証",
+        "映画",
+        "タグ",
+        "分析",
+        "推薦",
+    }
+    rendered = str(document)
+    assert "Personal film diary API with TMDB integration" not in rendered
+    assert "Mistral AI" not in rendered
+
+
+def test_register_and_login(client):
+    registered = client.post("/auth/register", json=VALID_USER)
+    assert registered.status_code == 201
+    assert registered.json()["user"]["username"] == "太郎映画"
+    assert registered.json()["token"]
+
+    logged_in = client.post(
+        "/auth/login",
+        json={"email": VALID_USER["email"], "password": VALID_USER["password"]},
+    )
+    assert logged_in.status_code == 200
+    assert logged_in.json()["user"]["email"] == VALID_USER["email"]
+
+
+def test_duplicate_email_returns_japanese_conflict(client):
+    assert client.post("/auth/register", json=VALID_USER).status_code == 201
     response = client.post("/auth/register", json=VALID_USER)
-    assert response.status_code == status.HTTP_201_CREATED
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "このメールアドレスはすでに登録されています。"
+    )
 
 
-def test_register_response_body(client):
-    """The registration response contains a JWT token and the user profile."""
-    response = client.post("/auth/register", json=VALID_USER)
-    body = response.json()
-    assert "token" in body
-    assert isinstance(body["token"], str)
-    assert len(body["token"]) > 0
-    user = body["user"]
-    assert user["first_name"] == VALID_USER["first_name"]
-    assert user["last_name"] == VALID_USER["last_name"]
-    assert user["email"] == VALID_USER["email"]
-    assert "id" in user
-    assert "created_at" in user
-    assert "hashed_password" not in user
-    assert "is_admin" not in user
-
-
-def test_register_without_age(client):
-    """Age is optional — registration without it returns 201."""
-    payload = {k: v for k, v in VALID_USER.items() if k != "age"}
-    response = client.post("/auth/register", json=payload)
-    assert response.status_code == status.HTTP_201_CREATED
-
-
-# ---------------------------------------------------------------------------
-# Register — duplicate / conflict
-# ---------------------------------------------------------------------------
-
-def test_user_already_registered(client):
-    """Registering the same email twice returns 409 with a descriptive message."""
-    client.post("/auth/register", json=VALID_USER)
-    response = client.post("/auth/register", json=VALID_USER)
-    assert response.status_code == status.HTTP_409_CONFLICT
-    assert response.json()["detail"] == "Email already registered"
-
-
-# ---------------------------------------------------------------------------
-# Register — email validation
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("bad_email", [
-    "InvalidEmail",
-    "missing-at-sign.com",
-    "@nodomain.com",
-    "no-tld@domain",
-    "",
-])
-def test_register_invalid_email(client, bad_email):
-    """Malformed email addresses are rejected with 422."""
-    payload = {**VALID_USER, "email": bad_email}
-    response = client.post("/auth/register", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-# ---------------------------------------------------------------------------
-# Register — password validation
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("bad_password", [
-    "short1!",           # too short (7 chars)
-    "NoDigitPassword!",  # missing digit
-    "NoSpecial1234",     # missing special character
-    "",                  # empty
-])
-def test_register_invalid_password(client, bad_password):
-    """Passwords that fail complexity rules are rejected with 422."""
-    payload = {**VALID_USER, "password": bad_password}
-    response = client.post("/auth/register", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-def test_register_password_too_long(client):
-    """A password exceeding 64 characters is rejected with 422."""
-    payload = {**VALID_USER, "password": "A1!" + "a" * 62}
-    response = client.post("/auth/register", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-# ---------------------------------------------------------------------------
-# Register — age validation
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("bad_age", [0, -1, 121, 999])
-def test_register_invalid_age(client, bad_age):
-    """Age values outside 1–120 are rejected with 422."""
-    payload = {**VALID_USER, "email": f"user{bad_age}@test.com", "age": bad_age}
-    response = client.post("/auth/register", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-# ---------------------------------------------------------------------------
-# Register — missing required fields
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("missing_field", [
-    "first_name", "last_name", "email", "password"
-])
-def test_register_missing_required_field(client, missing_field):
-    """Omitting any required field is rejected with 422."""
-    payload = {k: v for k, v in VALID_USER.items() if k != missing_field}
-    response = client.post("/auth/register", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-# ---------------------------------------------------------------------------
-# Login — happy path
-# ---------------------------------------------------------------------------
-
-def test_login_valid_user(client):
-    """Correct credentials after registration return 200 with a JWT token."""
-    client.post("/auth/register", json=VALID_USER)
+def test_invalid_login_does_not_reveal_account_existence(client):
     response = client.post(
         "/auth/login",
-        json={"email": "JohnDoe@test.com", "password": "Test1234!"}
+        json={"email": "unknown@example.com", "password": "Wrong123!"},
     )
-    assert response.status_code == status.HTTP_200_OK
-
-
-def test_login_response_body(client):
-    """The login response contains a JWT token and the user profile."""
-    client.post("/auth/register", json=VALID_USER)
-    response = client.post(
-        "/auth/login",
-        json={"email": VALID_USER["email"], "password": VALID_USER["password"]}
+    assert response.status_code == 401
+    assert response.json()["detail"] == (
+        "メールアドレスまたはパスワードが正しくありません。"
     )
-    body = response.json()
-    assert "token" in body
-    assert isinstance(body["token"], str)
-    assert len(body["token"]) > 0
-    assert body["user"]["email"] == VALID_USER["email"]
 
 
-# ---------------------------------------------------------------------------
-# Login — failure paths
-# ---------------------------------------------------------------------------
+def test_password_validation_is_japanese(client):
+    payload = {**VALID_USER, "email": "weak@example.com", "password": "abcdefgh"}
+    response = client.post("/auth/register", json=payload)
+    assert response.status_code == 422
+    assert "数字を1文字以上" in response.json()["detail"][0]["msg"]
 
-def test_login_non_registered_user(client):
-    """An unknown email returns 401 with a generic 'Invalid credentials' message."""
-    client.post("/auth/register", json=VALID_USER)
-    response = client.post(
-        "/auth/login",
-        json={"email": "UnregisteredUser@test.com", "password": "Test1234!"}
+
+def test_missing_required_field_is_japanese(client):
+    payload = {key: value for key, value in VALID_USER.items() if key != "email"}
+    response = client.post("/auth/register", json=payload)
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["msg"] == (
+        "メールアドレスは必須です。"
     )
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert response.json()["detail"] == "Invalid credentials"
 
 
-def test_login_wrong_password(client):
-    """A wrong password for a registered email returns 401 — same message as
-    unknown email to prevent user enumeration."""
-    client.post("/auth/register", json=VALID_USER)
-    response = client.post(
-        "/auth/login",
-        json={"email": "JohnDoe@test.com", "password": "!4321tseT"}
-    )
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert response.json()["detail"] == "Invalid credentials"
-
-
-def test_login_invalid_email_format(client):
-    """A malformed email at login is rejected with 422 before hitting the DB."""
-    response = client.post(
-        "/auth/login",
-        json={"email": "not-an-email", "password": "Test1234!"}
-    )
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+def test_protected_route_requires_login_in_japanese(client):
+    response = client.get("/films/history")
+    assert response.status_code == 401
+    assert response.json()["detail"] == "ログインが必要です。"

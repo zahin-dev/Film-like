@@ -62,7 +62,7 @@ def register_user(db: Session, payload: UserCreate) -> AuthResponse:
     if user_repository.get_by_email(db, payload.email) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered"
+            detail="このメールアドレスはすでに登録されています。"
         )
 
     hashed_password = bcrypt.hashpw(
@@ -125,13 +125,13 @@ def login_user(db: Session, payload: UserLogin) -> AuthResponse:
     if existing_user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials"
+            detail="メールアドレスまたはパスワードが正しくありません。"
         )
 
     if not existing_user.verify_password(payload.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials"
+            detail="メールアドレスまたはパスワードが正しくありません。"
         )
 
     return AuthResponse(
