@@ -45,6 +45,22 @@ Film-likeは、映画を観たときの気分や感想を作品ごとに振り�
 
 ![視聴履歴に「Midnight Matinee」、感想タグ「Heartwarming」、メモが表示されている画面。](docs/images/viewing-history.png)
 
+### 日本語・ローカル版の参考画面
+
+以下は、2026年7月に開発された日本語・ローカル版を起動して撮影した画面です。日本語UI、視聴傾向分析、ローカル推薦は、現在の `main` の収録範囲外です。[日本語ローカル化の記録](https://github.com/zahin-dev/Film-like/pull/5)
+
+#### ログイン
+
+![左にFilm-likeの紹介、右にメールアドレスとパスワードの入力欄がある日本語ログイン画面。](docs/images/japanese-local-login.png)
+
+#### 映画日記の分析
+
+![視聴記録の件数と、よく選ぶ感想タグ・最近の感想タグの集計を表示する画面。](docs/images/japanese-local-diary-analysis.png)
+
+#### 気分に合う映画のおすすめ
+
+![「じっくり考えたい」など、今の気分を選んで映画を探すローカル推薦画面。](docs/images/japanese-local-recommendations.png)
+
 <a id="quickstart"></a>
 
 ## ⚡ クイックスタート
