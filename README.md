@@ -1,59 +1,142 @@
-# Film-like — 2025年8月のMVPを対象とした後日の再構成・参考版
+<h1 align="center">Film-like</h1>
 
-2025年5月〜8月の初期MVPを採用応募で説明するための参考ブランチです。チームの回顧では、3名が約3か月で初期MVPを共同開発しました。2025年8月末までのソースや日付付き一次資料は確認できず、当時の完成範囲は確定できていません。このブランチは、現存する最古のコードで確認できる機能を基に2026年11月に整備したものです。[チームの回顧](docs/DevelopmentProcess.md)
+<p align="center">
+  <b>観た映画と、そのときの感想を残す映画日記。</b><br>
+  作品を検索し、感想タグやメモと一緒に視聴記録を保存できます。
+</p>
 
-GitHub上のリポジトリ作成日は2026年6月14日です。最古のコミット `70a6e9e`（2026年6月15日）には登録・ログイン、TMDB映画検索・詳細、視聴記録の登録・一覧・削除、感想タグ、評価、メモのコードがあります。APIスキーマが欠けていたため、機能を実行できるようにした2026年7月の修復コミット `20569ae` を基点にしました。[初回コミット](https://github.com/zahin-dev/Film-like/commit/70a6e9e) · [スキーマ修復](https://github.com/zahin-dev/Film-like/commit/20569ae)
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&amp;logo=python&amp;logoColor=white" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&amp;logo=fastapi&amp;logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&amp;logo=react&amp;logoColor=222222" alt="React 19">
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&amp;logo=postgresql&amp;logoColor=white" alt="PostgreSQL 16">
+</p>
 
-## このブランチの機能
+<p align="center">
+  <a href="#workflow">使い方</a> ·
+  <a href="#quickstart">クイックスタート</a> ·
+  <a href="#features">主な機能</a> ·
+  <a href="#technology">技術構成</a> ·
+  <a href="#documentation">ドキュメント</a> ·
+  <a href="#verification">検証</a>
+</p>
 
-- React画面でユーザー登録とログイン、サインアウト。
-- 今回追加した簡易画面でTMDB映画検索、視聴記録の登録・一覧・削除、タグとメモの入力。
-- FastAPIのSwagger UIで映画詳細や評価付きの登録を含むAPIを操作。PostgreSQLにはユーザー、視聴記録、英語タグ、記録時の映画タイトルとポスターURLを保存。
-- 推薦と分析は対象外。現履歴で確認できる実装は2026年7月のMistral推薦と視聴傾向集計です。初回READMEの構想から2025年の稼働は判断できません。[推薦のPR](https://github.com/zahin-dev/Film-like/pull/2) · [分析のPR](https://github.com/zahin-dev/Film-like/pull/3)
+---
 
-2026年7月の日本語UI・ローカル映画カタログ、ローカル推薦、TMDB・Mistral依存の廃止、旧ID・タグの互換移行、追加分析、ポートフォリオ指標・監査の実行スクリプトは対象外です。監査・設計の記録はGit履歴に残っており、現行版の[検証記録](docs/Verification.md)と[移行計画](docs/JapaneseOfflineMigrationPlan.md)もこのブランチで参照できます。これらの記録は現行版に関する資料です。[日本語ローカル化のPR](https://github.com/zahin-dev/Film-like/pull/5)
+Film-likeは、映画を観たときの気分や感想を作品ごとに振り返るためのWebアプリです。
 
-## ローカルで起動する
+チームの回顧では、3名で約3か月かけて初期MVPを共同開発しました。2025年8月末までのソースや日付付きの一次資料は確認できておらず、当時の完成範囲は未確定です。現行実装は、2026年6月の最古の公開コードと同年7月のAPIスキーマ修復を基に、2026年11月に視聴記録の画面と検証環境を整備した再構成版です。GitHub上のリポジトリは2026年6月14日に作成されました。[チームの回顧](docs/DevelopmentProcess.md) · [最古の公開コード](https://github.com/zahin-dev/Film-like/commit/70a6e9e) · [スキーマ修復](https://github.com/zahin-dev/Film-like/commit/20569ae)
 
-Python 3.12、Node.js 24、Docker Composeを用意します。新規の専用PostgreSQLを使用してください。このブランチのAlembicは `e5f8a2b3c491` までです。
+<a id="workflow"></a>
+
+## アプリの使い方
+
+1. アカウントを登録してログインします。
+2. 映画のタイトルを検索し、候補から観た作品を選びます。
+3. 感想タグやメモを添えて記録します。保存した作品は視聴履歴から確認・削除できます。
+
+<a id="quickstart"></a>
+
+## ⚡ クイックスタート
+
+**Python 3.12**、**Node.js 24**、**Docker Compose**、**TMDBのRead Access Token**を用意します。
+
+### データベースを起動する
 
 リポジトリのルートで実行します。
 
-```sh
+```powershell
 docker compose up -d --wait
 ```
 
-Composeプロジェクトは `film-like-mvp-2025-scope` で、専用ボリュームを使い、DBは `127.0.0.1:55432` で待ち受けます。既存の `DATABASE_URL` がシェルに設定されている場合は、新規DBの接続先に設定し直してください。
+専用のComposeプロジェクト `film-like-mvp-2025-scope` が、PostgreSQLを `127.0.0.1:55432` で起動します。初回セットアップには新規の開発用DBを使います。
 
-`backend` に移動し、Python 3.12の仮想環境を作成・有効化します。`.env.example` を `.env` にコピーし、専用DBのURL、生成した `SECRET_KEY`、有効な `TMDB_READ_ACCESS_TOKEN` を設定します。
+### APIを起動する
 
-```sh
+`backend` でPython 3.12の仮想環境を作成・有効化します。初回は `.env.example` を `.env` にコピーし、次の値を設定します。
+
+| 環境変数 | 設定内容 |
+| :--- | :--- |
+| `DATABASE_URL` | Composeで起動した開発用PostgreSQLのURL。シェルですでに設定している場合は、この開発用DBを指すことを確認してください。 |
+| `SECRET_KEY` | ローカル用に生成したランダムなJWT署名キー。 |
+| `TMDB_READ_ACCESS_TOKEN` | TMDBアカウントのRead Access Token。 |
+
+```powershell
 python -m pip install -r requirements.txt
 python -m alembic upgrade head
 python -m seeds.seed_tag
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-別のターミナルで `frontend` に移動します。
+### 画面を起動する
 
-```sh
+別のターミナルで `frontend` に移動し、実行します。
+
+```powershell
 npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-- 画面は [localhost:5173](http://localhost:5173)、Swagger UIは [localhost:8000/docs](http://localhost:8000/docs)。
-- Swagger UIの保護ルートには `POST /auth/login` で受け取ったJWTを `Authorize` に入力します。視聴記録は `GET /films/history`、`POST /films/log`、`DELETE /films/log/{tmdb_id}` を使います。
+画面は [localhost:5173](http://localhost:5173)、API仕様と操作画面は [Swagger UI](http://localhost:8000/docs) で開けます。Swagger UIの保護された操作には、`POST /auth/login` で取得したJWTを `Authorize` に入力します。
 
-## 検証
+<a id="features"></a>
 
-`backend` で `python -m pytest -q --cov=app` を実行します。テストはインメモリSQLiteとTMDBのモックを使用します。`frontend` で `npm run lint` と `npm run build` を実行します。
+## 🎯 主な機能
 
-| 項目 | 結果 |
-| --- | --- |
-| バックエンド pytest・カバレッジ | Python 3.12.16で79件成功、91%。インメモリSQLite・TMDBモック |
-| フロントエンド | Node.js 24で `npm ci`、`npm run lint`、`npm run build` が成功 |
-| PostgreSQL | 新規のローカルPostgreSQL 16でAlembic 4件を適用し、`e5f8a2b3c491` と50件のタグ投入を確認 |
-| ブラウザ統合 | Reactのビルド、FastAPI、新規PostgreSQLを接続。登録、ログイン失敗・成功、検索、タグ・メモ付き記録、再読込後の記録表示、削除、サインアウトに成功。映画詳細のAPI応答も確認。TMDB応答はモック |
-| Docker | `docker compose config --quiet` は成功。Docker DesktopのLinuxデーモンに接続できず、`docker compose up -d --wait` は未完了 |
-| 外部TMDB | 有効なトークンでの実通信は未確認 |
-| 依存関係監査 | npmが14件（高8件、中6件）を報告。開発依存を除いても高2件が残存 |
+- **アカウント** — ユーザー登録、ログイン、サインアウト。
+- **映画検索・詳細** — TMDBの作品をタイトルで検索。映画の詳細はAPIから取得できます。
+- **視聴記録** — アカウントごとに映画を登録・一覧表示・削除。
+- **感想タグ・評価・メモ** — 画面でタグとメモを登録。評価はAPIから設定できます。
+
+### 収録範囲
+
+映画日記に範囲を絞っています。2026年7月に追加された推薦・視聴傾向分析、日本語ローカルカタログと外部APIを使わない構成、旧IDの互換移行、ポートフォリオ計測スクリプトは収録範囲外です。[推薦](https://github.com/zahin-dev/Film-like/pull/2) · [視聴傾向分析と計測](https://github.com/zahin-dev/Film-like/pull/3) · [日本語ローカル化](https://github.com/zahin-dev/Film-like/pull/5)
+
+<a id="technology"></a>
+
+## 🧩 技術構成
+
+| 領域 | 使用技術 |
+| :--- | :--- |
+| バックエンド | Python 3.12 / FastAPI / SQLAlchemy |
+| フロントエンド | React 19 / Vite |
+| データベース | PostgreSQL 16 / Alembic |
+| 認証・外部連携 | JWT / TMDB API |
+| ローカル開発 | Docker Compose（DB） / Uvicorn / Vite |
+
+<a id="documentation"></a>
+
+## 📚 ドキュメント
+
+| 分類 | 資料 |
+| :--- | :--- |
+| チーム・経緯 | [開発メンバー](CONTRIBUTORS.md) · [開発プロセス](docs/DevelopmentProcess.md) |
+| 技術設計 | [アーキテクチャ](docs/diagrams/Architecture.md) · [ER図](docs/diagrams/ERDiagram.md) · [シーケンス図](docs/diagrams/SequenceDiagrams.md) |
+| 2026年7月の日本語ローカル版の記録 | [移行計画](docs/JapaneseOfflineMigrationPlan.md) · [インポート仕様](docs/FilmDataImport.md) · [当時の検証記録](docs/Verification.md) |
+
+<a id="verification"></a>
+
+## 🧪 検証
+
+`backend` で次を実行します。テストはインメモリSQLiteとTMDBのモックを使用します。
+
+```powershell
+python -m pytest -q --cov=app
+```
+
+`frontend` で次を実行します。
+
+```powershell
+npm run lint
+npm run build
+```
+
+| 項目 | 2026年11月の再構成時の結果 |
+| :--- | :--- |
+| バックエンド | pytest 79件成功、カバレッジ91%。 |
+| フロントエンド | `npm ci`、Lint、プロダクションビルドが成功。 |
+| PostgreSQL | 新規のPostgreSQL 16にAlembicマイグレーション4件を適用し、タグ50件を投入。 |
+| ブラウザ統合 | React・FastAPI・新規PostgreSQLを接続し、登録、ログイン、映画検索、タグ・メモ付き記録、再読込後の表示、削除、サインアウトを確認。映画詳細APIも確認。TMDB応答はモック。 |
+| Docker Compose | 設定検査に成功。Linuxデーモンに接続できず、Compose経由の起動は未確認。 |
+| TMDB実通信 | 有効なトークンを使った実通信は未確認。 |
+| 依存関係監査 | npmが14件（高8件、中6件）を報告。開発依存を除いた結果は高2件。 |
