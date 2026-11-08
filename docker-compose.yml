@@ -1,15 +1,20 @@
+name: film-like-mvp-2025-scope
 services:
   db:
     image: postgres:16
-    container_name: cinemood_db
     environment:
-      POSTGRES_USER: cinemood
-      POSTGRES_PASSWORD: cinemood
-      POSTGRES_DB: cinemood
+      POSTGRES_USER: film_like_mvp
+      POSTGRES_PASSWORD: film_like_mvp
+      POSTGRES_DB: film_like_mvp
     ports:
-      - "5432:5432"
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "film_like_mvp", "-d", "film_like_mvp"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mvp_postgres_data:/var/lib/postgresql/data
 
 volumes:
-  postgres_data:
+  mvp_postgres_data:

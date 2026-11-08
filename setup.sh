@@ -86,7 +86,7 @@ fi
 # 7. Setup frontend
 echo "Setting up frontend..."
 cd frontend
-npm install
+npm ci
 echo "Frontend ready."
 cd ..
 
@@ -100,24 +100,20 @@ fi
 
 # 9. Start PostgreSQL via Docker
 echo "Starting PostgreSQL..."
-docker compose up -d
+docker compose up -d --wait
 
-echo "Waiting for PostgreSQL to be ready..."
-until docker exec cinemood_db pg_isready -U cinemood -d cinemood > /dev/null 2>&1; do
-    sleep 1
-done
-echo "PostgreSQL running on port 5432."
+echo "PostgreSQL running on local port 55432."
 
 # 10. Run database migrations
 echo "Running database migrations..."
 cd backend
 source venv/bin/activate
-alembic upgrade head
+DATABASE_URL=postgresql://film_like_mvp:film_like_mvp@127.0.0.1:55432/film_like_mvp alembic upgrade head
 echo "Migrations applied."
 
 # 11. Seed reference data (tags)
 echo "Seeding tags..."
-python seeds/seed_tag.py
+DATABASE_URL=postgresql://film_like_mvp:film_like_mvp@127.0.0.1:55432/film_like_mvp python -m seeds.seed_tag
 echo "Tags seeded."
 cd ..
 

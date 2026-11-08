@@ -1,294 +1,59 @@
-# Film-like
+# Film-like — 2025年8月のMVPを対象とした後日の再構成・参考版
 
-Film-like is a personal film-diary application under active development. The current repository contains backend source for authentication, TMDB film lookup, tags, and viewing-history management. An AI-assisted recommendation experience is part of the product plan, but it is not implemented in the current source tree.
+2025年5月〜8月の初期MVPを採用応募で説明するための参考ブランチです。チームの回顧では、3名が約3か月で初期MVPを共同開発しました。2025年8月末までのソースや日付付き一次資料は確認できず、当時の完成範囲は確定できていません。このブランチは、現存する最古のコードで確認できる機能を基に2026年11月に整備したものです。[チームの回顧](docs/DevelopmentProcess.md)
 
-## Table of Contents
+GitHub上のリポジトリ作成日は2026年6月14日です。最古のコミット `70a6e9e`（2026年6月15日）には登録・ログイン、TMDB映画検索・詳細、視聴記録の登録・一覧・削除、感想タグ、評価、メモのコードがあります。APIスキーマが欠けていたため、機能を実行できるようにした2026年7月の修復コミット `20569ae` を基点にしました。[初回コミット](https://github.com/zahin-dev/Film-like/commit/70a6e9e) · [スキーマ修復](https://github.com/zahin-dev/Film-like/commit/20569ae)
 
-- [Current Status](#current-status)
-- [Implemented Features](#implemented-features)
-- [Planned or Incomplete Features](#planned-or-incomplete-features)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Database](#database)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [API Overview](#api-overview)
-- [Testing](#testing)
-- [Documentation](#documentation)
-- [Roadmap](#roadmap)
-- [Author](#author)
+## このブランチの機能
 
-## Current Status
+- React画面でユーザー登録とログイン、サインアウト。
+- 今回追加した簡易画面でTMDB映画検索、視聴記録の登録・一覧・削除、タグとメモの入力。
+- FastAPIのSwagger UIで映画詳細や評価付きの登録を含むAPIを操作。PostgreSQLにはユーザー、視聴記録、英語タグ、記録時の映画タイトルとポスターURLを保存。
+- 推薦と分析は対象外。現履歴で確認できる実装は2026年7月のMistral推薦と視聴傾向集計です。初回READMEの構想から2025年の稼働は判断できません。[推薦のPR](https://github.com/zahin-dev/Film-like/pull/2) · [分析のPR](https://github.com/zahin-dev/Film-like/pull/3)
 
-The backend source implements the main authentication and viewing-history workflows. The frontend implements a login and registration page, authentication state, JWT storage, and API interceptors. The dashboard, catalog, film-detail, recommendation, and profile routes currently render placeholder components.
+2026年7月の日本語UI・ローカル映画カタログ、ローカル推薦、TMDB・Mistral依存の廃止、旧ID・タグの互換移行、追加分析、ポートフォリオ指標・監査の実行スクリプトは対象外です。監査・設計の記録はGit履歴に残っており、現行版の[検証記録](docs/Verification.md)と[移行計画](docs/JapaneseOfflineMigrationPlan.md)もこのブランチで参照できます。これらの記録は現行版に関する資料です。[日本語ローカル化のPR](https://github.com/zahin-dev/Film-like/pull/5)
 
-This is not a complete end-to-end MVP or a production-ready application.
+## ローカルで起動する
 
-> **Repository completeness note:** the backend modules import an `app.schemas` package, but that package is not present in the current Git tree. The source modules and automated tests describe the implemented backend behavior listed below, but the backend cannot be imported or its tests executed successfully until the missing schema modules are restored.
+Python 3.12、Node.js 24、Docker Composeを用意します。新規の専用PostgreSQLを使用してください。このブランチのAlembicは `e5f8a2b3c491` までです。
 
-## Implemented Features
+リポジトリのルートで実行します。
 
-| Area | Backend status | Frontend status |
-|---|---|---|
-| User registration | Implemented at `POST /auth/register` | Registration mode is implemented on the authentication page |
-| User login | Implemented at `POST /auth/login` | Login form, session token storage, and logout state are implemented |
-| JWT authentication | Token creation and protected-route validation are implemented | Axios adds the stored Bearer token to requests |
-| TMDB film search | Implemented at `GET /films/search` | Catalog page is a placeholder |
-| TMDB film details | Implemented at `GET /films/{tmdb_id}` | Film-detail page is a placeholder |
-| Viewing history | Create, retrieve, and delete endpoints are implemented | Dashboard/history UI is a placeholder |
-| Tags | Seed data, storage, association, and public `GET /tags` endpoint are implemented | Tag-selection UI is not implemented |
-| Prestige tier | Optional `PrestigeTier` storage is implemented | Editing UI is not implemented |
-| Personal notes | Optional text storage is implemented | Editing UI is not implemented |
-| PostgreSQL | SQLAlchemy configuration and Alembic migrations are present | Not applicable |
-| Docker database | A PostgreSQL 16 service is configured in `docker-compose.yml` | Not applicable |
-| Backend tests | Pytest suites exist for authentication, TMDB-backed film operations, tags, history, and JWT edge cases | Not applicable |
-
-The film-detail backend also requests TMDB watch-provider data and returns subscription provider names for the configured country. This is different from storing a user's subscriptions or filtering recommendations by them; those capabilities are not implemented.
-
-## Planned or Incomplete Features
-
-The following items do not have working source implementations in the current repository:
-
-- Mistral AI integration and AI-generated recommendations
-- A Recommendation Facade or `/recommendations` API routes
-- Mood questionnaire and swipe interface
-- Watchlist model, repository, service, API, and UI
-- User profile API and working profile UI
-- Stored streaming-platform preferences
-- Recommendation filtering by a user's subscribed platforms
-- Working dashboard, catalog, film-detail, recommendation, and profile pages
-- A complete end-to-end MVP
-
-## Tech Stack
-
-| Layer | Technology | Current role |
-|---|---|---|
-| Frontend | React 19, React Router, Tailwind CSS, Axios | Authentication page, routing, auth context, and placeholder routes |
-| Backend | Python 3.11+, FastAPI | Auth, film, tag, and viewing-history route source |
-| Persistence | PostgreSQL 16, SQLAlchemy, Alembic | Users, tags, viewing-history entries, and tag associations |
-| Authentication | JWT with HS256, bcrypt | Stateless access tokens and password hashing |
-| Film data | TMDB API | Search, details, posters, credits, and watch-provider data |
-| Testing | pytest, pytest-cov | Backend API and service behavior tests |
-| Planned AI | Mistral AI | Not integrated in the current implementation |
-
-## Architecture
-
-The current implementation follows this architecture:
-
-```text
-React frontend
-    -> FastAPI auth, film, and tag routes
-    -> authentication, film, and viewing-history services
-    -> user and viewing-history repositories
-    -> PostgreSQL
-
-FastAPI film services
-    -> TMDB API
+```sh
+docker compose up -d --wait
 ```
 
-Mistral AI, a Recommendation Facade, watchlist components, profile APIs, and platform-preference storage belong to the planned architecture and are not part of the current implementation.
+Composeプロジェクトは `film-like-mvp-2025-scope` で、専用ボリュームを使い、DBは `127.0.0.1:55432` で待ち受けます。既存の `DATABASE_URL` がシェルに設定されている場合は、新規DBの接続先に設定し直してください。
 
-See [System Architecture](docs/diagrams/Architecture.md) for separate current and planned diagrams.
+`backend` に移動し、Python 3.12の仮想環境を作成・有効化します。`.env.example` を `.env` にコピーし、専用DBのURL、生成した `SECRET_KEY`、有効な `TMDB_READ_ACCESS_TOKEN` を設定します。
 
-## Database
-
-Film-like uses PostgreSQL as its relational database. TMDB is used as the source of truth for complete film metadata. The application stores the TMDB identifier and caches the film title and poster URL in viewing-history entries so that history lists can be displayed without an additional TMDB request for every item.
-
-A viewing-history entry can also store tags, an optional prestige tier, and an optional personal note. The current schema does not contain watchlist, platform, or user-platform-preference tables.
-
-See the [Entity Relationship Diagram](docs/diagrams/ERDiagram.md).
-
-## Project Structure
-
-```text
-Portfolio/
-├── README.md
-├── docker-compose.yml
-├── setup.sh
-├── start.sh
-├── clean.sh
-├── docs/
-│   └── diagrams/
-│       ├── Architecture.md
-│       ├── ClassDiagram.md
-│       ├── ERDiagram.md
-│       └── SequenceDiagrams.md
-├── backend/
-│   ├── alembic/
-│   ├── app/
-│   │   ├── external/
-│   │   ├── models/
-│   │   ├── repositories/
-│   │   ├── routes/
-│   │   ├── services/
-│   │   ├── database.py
-│   │   ├── dependencies.py
-│   │   └── main.py
-│   ├── seeds/
-│   ├── tests/
-│   └── requirements.txt
-└── frontend/
-    ├── public/
-    └── src/
-        ├── context/
-        ├── pages/
-        ├── services/
-        ├── App.jsx
-        └── main.jsx
+```sh
+python -m pip install -r requirements.txt
+python -m alembic upgrade head
+python -m seeds.seed_tag
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-## Getting Started
+別のターミナルで `frontend` に移動します。
 
-### Prerequisites
-
-- Python 3.11 or newer
-- Node.js 18 or newer
-- Docker Engine with Docker Compose v2
-- A TMDB Read Access Token
-
-The current implementation does not require a Mistral AI key because no Mistral integration exists yet.
-
-### One-time setup
-
-On a supported Bash environment, run:
-
-```bash
-./setup.sh
+```sh
+npm ci
+npm run dev -- --host 127.0.0.1
 ```
 
-The script creates the backend virtual environment, installs backend and frontend dependencies, creates local environment files, starts PostgreSQL, applies migrations, and seeds tags.
+- 画面は [localhost:5173](http://localhost:5173)、Swagger UIは [localhost:8000/docs](http://localhost:8000/docs)。
+- Swagger UIの保護ルートには `POST /auth/login` で受け取ったJWTを `Authorize` に入力します。視聴記録は `GET /films/history`、`POST /films/log`、`DELETE /films/log/{tmdb_id}` を使います。
 
-Set `TMDB_READ_ACCESS_TOKEN` in `backend/.env` before using TMDB-backed endpoints.
+## 検証
 
-> The missing `backend/app/schemas` package noted under [Current Status](#current-status) currently prevents the backend application from starting after setup.
+`backend` で `python -m pytest -q --cov=app` を実行します。テストはインメモリSQLiteとTMDBのモックを使用します。`frontend` で `npm run lint` と `npm run build` を実行します。
 
-### Development session
-
-```bash
-source backend/venv/bin/activate
-./start.sh
-```
-
-When the application can start, the configured development URLs are:
-
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:8000`
-- Swagger UI: `http://localhost:8000/docs`
-
-### Cleaning generated files
-
-```bash
-./clean.sh
-```
-
-Hard mode additionally removes reinstallable local dependencies and environment files:
-
-```bash
-./clean.sh --hard
-```
-
-Do not run hard mode while the Python virtual environment is active.
-
-## API Overview
-
-### Implemented API
-
-These are the routes currently registered in `backend/app/main.py` and its included routers.
-
-| Method | Endpoint | Description | Authentication |
-|---|---|---|---|
-| GET | `/` | API health message | Public |
-| POST | `/auth/register` | Create a user and return `{ user, token }` | Public |
-| POST | `/auth/login` | Validate credentials and return `{ user, token }` | Public |
-| GET | `/tags` | List seeded reference tags | Public |
-| GET | `/films/search?query={title}` | Search TMDB and return a JSON array of films | Public |
-| GET | `/films/history` | Return the authenticated user's viewing-history entries | Bearer token |
-| GET | `/films/{tmdb_id}` | Return TMDB film details plus the user's `in_history` status | Bearer token |
-| POST | `/films/log` | Create a viewing-history entry and cache its title and poster URL | Bearer token |
-| DELETE | `/films/log/{tmdb_id}` | Delete the user's history entry for the specified TMDB film | Bearer token |
-
-### Planned API
-
-No routes for the following areas are registered in the current FastAPI application. Names shown here describe planned resource areas, not a current API contract.
-
-- Watchlist operations
-- User profile operations
-- Streaming-platform preference operations
-- Recommendation operations, including a possible `/recommendations/start` endpoint
-
-## Testing
-
-Backend test files are present under `backend/tests` and use an in-memory SQLite database with mocked TMDB calls.
-
-```bash
-cd backend
-pytest
-```
-
-Optional coverage output:
-
-```bash
-pytest --cov=app --cov-report=html
-```
-
-The presence of tests does not imply that they pass in every checkout. See the repository completeness note above and the latest validation results reported with the documentation change.
-
-Frontend checks are configured as:
-
-```bash
-cd frontend
-npm run lint
-npm run build
-```
-
-## Documentation
-
-- [System Architecture](docs/diagrams/Architecture.md) distinguishes current implementation from target architecture.
-- [Class Diagram](docs/diagrams/ClassDiagram.md) documents current model classes and identifies planned concepts separately.
-- [Entity Relationship Diagram](docs/diagrams/ERDiagram.md) shows only the tables created by current migrations.
-- [Sequence Diagrams](docs/diagrams/SequenceDiagrams.md) separates implemented API flows from planned recommendation flows.
-
-## Roadmap
-
-### Implemented in backend source
-
-- [x] User registration and login logic
-- [x] JWT creation and protected-route validation
-- [x] TMDB search and film-detail logic
-- [x] Viewing-history creation, retrieval, and deletion
-- [x] Tag association, prestige tier, and personal-note persistence
-- [x] PostgreSQL configuration, migrations, and Docker service
-- [x] Backend automated test suites
-
-### Incomplete or planned
-
-- [ ] Restore the missing backend schema modules required by current imports
-- [ ] Connect film, tag, and viewing-history APIs to working frontend pages
-- [ ] Implement the dashboard, catalog, film-detail, and profile experiences
-- [ ] Implement a watchlist
-- [ ] Implement user profile and streaming-platform preference APIs
-- [ ] Implement the mood questionnaire and swipe interface
-- [ ] Integrate Mistral AI and recommendation endpoints
-- [ ] Filter recommendations by stored platform subscriptions
-- [ ] Complete and validate the end-to-end MVP
-
-### Possible future versions
-
-- Guest mode
-- Additional languages
-- Social features and shared lists
-- Cinema listings and nearby showtimes
-- Native mobile application
-- Viewing-history export
-
-## Author
-
-**zahin-dev**
-
-- University: Kanagawa Institute of Technology
-- Faculty: Faculty of Information Technology
-- Department: Department of Information Systems
-- Year: 3rd Year Undergraduate Student
-- E-mail: islam.zahin.0116@gmail.com
-
-- GitHub: [@zahin-dev](https://github.com/zahin-dev)
+| 項目 | 結果 |
+| --- | --- |
+| バックエンド pytest・カバレッジ | Python 3.12.16で79件成功、91%。インメモリSQLite・TMDBモック |
+| フロントエンド | Node.js 24で `npm ci`、`npm run lint`、`npm run build` が成功 |
+| PostgreSQL | 新規のローカルPostgreSQL 16でAlembic 4件を適用し、`e5f8a2b3c491` と50件のタグ投入を確認 |
+| ブラウザ統合 | Reactのビルド、FastAPI、新規PostgreSQLを接続。登録、ログイン失敗・成功、検索、タグ・メモ付き記録、再読込後の記録表示、削除、サインアウトに成功。映画詳細のAPI応答も確認。TMDB応答はモック |
+| Docker | `docker compose config --quiet` は成功。Docker DesktopのLinuxデーモンに接続できず、`docker compose up -d --wait` は未完了 |
+| 外部TMDB | 有効なトークンでの実通信は未確認 |
+| 依存関係監査 | npmが14件（高8件、中6件）を報告。開発依存を除いても高2件が残存 |
