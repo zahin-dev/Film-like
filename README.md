@@ -95,7 +95,7 @@ flowchart TD
 - Python 3.12
 - Node.js 24
 - Docker Compose
-- TMDBのRead Access Token
+- TMDBの読み取り用アクセストークン（API設定の「API Read Access Token」）
 
 ### インストールと起動
 
@@ -135,7 +135,7 @@ Swagger UIの保護された操作には、`POST /auth/login` で取得したJWT
 | --- | --- |
 | `DATABASE_URL` | Composeで起動した開発用DBのURL。シェルに設定済みの場合も接続先を確認します。 |
 | `SECRET_KEY` | ローカル用に生成したランダムなJWT署名キー。 |
-| `TMDB_READ_ACCESS_TOKEN` | TMDBアカウントのRead Access Token。 |
+| `TMDB_READ_ACCESS_TOKEN` | TMDBアカウントの読み取り用アクセストークン。 |
 
 設定例は [バックエンドの環境変数サンプル](backend/.env.example) にあります。
 
@@ -184,7 +184,7 @@ docs/          # 設計資料
 python -m pytest -q --cov=app
 ```
 
-フロントエンドのLintとビルドは、`frontend` で実行します。
+フロントエンドの静的検査とビルドは、`frontend` で実行します。
 
 ```powershell
 npm run lint
