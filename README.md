@@ -6,6 +6,7 @@
 </div>
 
 <p align="center">
+  <a href="https://film-like.vercel.app/"><strong>公開アプリ</strong></a> ·
   <a href="#development">開発・公開状況</a> ·
   <a href="#quickstart">はじめ方</a> ·
   <a href="#features">リポジトリで使える機能</a> ·
@@ -26,7 +27,7 @@
 | 開発人数 | 3名 |
 | 現在の状況 | 開発停止 |
 | GitHubへの初回登録 | 2026年6月 |
-| 公開アプリ | Vercelで公開準備中 |
+| 公開アプリ | [Film-likeを開く](https://film-like.vercel.app/) |
 
 初期MVPでは、アカウント登録、映画検索、視聴記録を実装しました。7月にGitHubのPRで検証したのは、気分に応じた推薦を加えた版です。[推薦機能のPR](https://github.com/zahin-dev/Film-like/pull/2)
 
