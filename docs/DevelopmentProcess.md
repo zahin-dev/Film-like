@@ -16,7 +16,7 @@ Film-likeは3名のチームで共同開発し、現在は開発を停止して�
 
 ## 開発年月の訂正
 
-過去のREADMEには「2025年5月に開発開始、2025年8月に初期MVP完成」と記載した版があります。正しい年月は開発開始が2026年4月、初期MVP完成が2026年6月です。2026年7月の検証は、初期MVPに気分別の推薦を追加した版を対象としています。[年月を訂正したコミット](https://github.com/zahin-dev/Film-like/commit/844c202d7193c40cc9e2ad15600da9a7cc0e62c5) · [推薦機能のPR](https://github.com/zahin-dev/Film-like/pull/2)
+旧版READMEの開発年月を訂正しました。開発開始は2026年4月、初期MVP完成は2026年6月です。2026年7月には、初期MVPに気分別の推薦を追加した版を検証しました。[推薦機能のPR](https://github.com/zahin-dev/Film-like/pull/2)
 
 ## 開発時の主担当
 
