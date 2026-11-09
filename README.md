@@ -5,15 +5,40 @@
   <p>🎬 <strong>映画検索</strong> · 🏷️ <strong>感想タグ</strong> · 📓 <strong>視聴履歴</strong></p>
 </div>
 
+<p align="center">
+  <a href="#development">開発・公開状況</a> ·
+  <a href="#quickstart">はじめ方</a> ·
+  <a href="#features">リポジトリで使える機能</a> ·
+  <a href="#technology">技術構成</a> ·
+  <a href="#verification">テスト</a>
+</p>
+
+---
+
+<a id="development"></a>
+
+## 開発・公開状況
+
+| 項目 | 内容 |
+| --- | --- |
+| 開発開始 | 2026年4月 |
+| 初期MVP完成 | 2026年6月 |
+| 開発人数 | 3名 |
+| 現在の状況 | 開発停止 |
+| GitHubへの初回登録 | 2026年6月 |
+| 公開アプリ | Vercelで公開準備中 |
+
+初期MVPでは、アカウント登録、映画検索、視聴記録を実装しました。7月にGitHubのPRで検証したのは、気分に応じた推薦を加えた版です。[推薦機能のPR](https://github.com/zahin-dev/Film-like/pull/2)
+
 ## 🎬 Film-likeとは
 
 Film-likeは、観た作品とそのときの感想を作品ごとに残せるWebアプリです。TMDBで映画を検索し、自分の視聴記録にタグやメモを保存できます。
 
-2025年5月に3名で開発を始め、2025年8月末に初期MVPを完成させました。
-
 ## ✨ なぜFilm-likeか
 
 点数だけでは、何が心に残ったかを後から思い出しにくいことがあります。タグはそのときの感情を手早く残すために、メモは印象に残った場面や理由を書き留めるために使えます。
+
+<a id="features"></a>
 
 ## 🎯 リポジトリで使える機能
 
@@ -47,6 +72,8 @@ flowchart TD
 ```
 
 [アーキテクチャ](docs/diagrams/Architecture.md) · [ER図](docs/diagrams/ERDiagram.md) · [シーケンス図](docs/diagrams/SequenceDiagrams.md)
+
+<a id="technology"></a>
 
 ## 🛠 技術構成
 
@@ -134,6 +161,8 @@ frontend/
 └── src/       # Reactの画面、認証状態、APIクライアント
 docs/          # 設計資料
 ```
+
+<a id="verification"></a>
 
 ## 🧪 テスト
 
