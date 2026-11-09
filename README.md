@@ -138,6 +138,17 @@ Swagger UIの保護された操作には、`POST /auth/login` で取得したJWT
 
 設定例は [バックエンドの環境変数サンプル](backend/.env.example) にあります。
 
+## ☁️ Vercelで公開する
+
+Vercelで同じリポジトリを2つのプロジェクトに分けて取り込みます。
+
+| プロジェクト | ルートディレクトリ | プリセット | 本番環境変数 |
+| --- | --- | --- | --- |
+| API | `backend` | FastAPI | `DATABASE_URL`、`SECRET_KEY`、`TMDB_READ_ACCESS_TOKEN`、`FRONTEND_ORIGIN` |
+| 画面 | `frontend` | Vite | `VITE_API_URL` |
+
+Filmlike専用のPostgreSQLを用意し、公開前に `backend` から `python -m alembic upgrade head`、`python -m seeds.seed_tag` の順で実行します。`DATABASE_URL` はTLSを有効にした専用DBの接続URL、`SECRET_KEY` は本番用に生成したランダムな署名キーを使います。APIの `FRONTEND_ORIGIN` には画面の公開オリジン、画面の `VITE_API_URL` にはAPIの公開オリジンを、末尾のスラッシュなしで設定します。
+
 ## ⌨️ 主なコマンド
 
 | 実行場所 | コマンド | 用途 |

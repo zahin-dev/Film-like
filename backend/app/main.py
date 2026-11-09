@@ -7,6 +7,7 @@ the root health check endpoint.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.config import settings
 from app.routes import auth, film, tag
 
 # FastAPI application instance.
@@ -18,14 +19,11 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# CORS configuration for development.
-# allow_origins=["*"] accepts requests from any origin — fine for local dev.
-# allow_credentials is NOT set: it is only needed for cookie-based auth.
-# Film-like uses JWT in the Authorization header, not cookies, so Axios never
-# sends credentials cross-origin and this option is not required.
+# The hosted API uses the configured frontend origin. Local development
+# retains the permissive default for Vite and other local clients.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[settings.FRONTEND_ORIGIN],
     allow_methods=["*"],
     allow_headers=["*"],
 )

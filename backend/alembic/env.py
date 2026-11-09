@@ -7,7 +7,7 @@ from app.config import settings  # centralized environment configuration
 config = context.config
 
 # Inject DATABASE_URL from centralized settings into Alembic config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 # Set up Python logging from alembic.ini
 if config.config_file_name is not None:

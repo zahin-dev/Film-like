@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     SECRET_KEY: str
     TMDB_READ_ACCESS_TOKEN: str
+    FRONTEND_ORIGIN: str = "*"
 
 
 settings = Settings()
