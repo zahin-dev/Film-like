@@ -29,7 +29,7 @@
 | GitHubへの初回登録 | 2026年6月 |
 | 公開アプリ | [Film-likeを開く](https://film-like.vercel.app/) |
 
-初期MVPでは、アカウント登録、映画検索、視聴記録を実装しました。7月にGitHubのPRで検証したのは、気分に応じた推薦を加えた版です。[推薦機能のPR](https://github.com/zahin-dev/Film-like/pull/2)
+初期MVPでは、アカウント登録、映画検索、視聴記録を実装しました。7月にGitHubのPRで検証したのは、気分に応じた推薦を加えた版です。[推薦機能のPR](https://github.com/zahin-dev/Film-like/pull/2) · [開発年月の訂正](docs/DevelopmentProcess.md#開発年月の訂正)
 
 ## 🎬 Film-likeとは
 
